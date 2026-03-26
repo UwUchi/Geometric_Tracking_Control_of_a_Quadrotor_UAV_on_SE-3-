@@ -1,0 +1,13 @@
+# ROS2 编译产物
+install/
+build/
+log/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 编译器/编辑器配置
+.vscode/
+.idea/
+.DS_Store
