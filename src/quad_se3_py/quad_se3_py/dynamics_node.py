@@ -1,9 +1,9 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
-from geometry_msgs.msg import Vector3
+from geometry_msgs.msg import Vector3, Quaternion
 
-from .utils import hat, project_to_so3
+from .utils import hat, project_to_so3, rotmat_to_quat
 
 class DynamicsNode(Node):
     def __init__(self):
@@ -16,7 +16,7 @@ class DynamicsNode(Node):
         self.pub_state = self.create_publisher(Vector3, '/state', 10)
         self.pub_velocity = self.create_publisher(Vector3, '/velocity', 10)
         self.pub_omega = self.create_publisher(Vector3, '/omega', 10)
-        self.pub_b3 = self.create_publisher(Vector3, '/b3', 10)
+        self.pub_orientation = self.create_publisher(Quaternion, '/orientation', 10)
 
         self.m = 1.0
         self.g = 9.81
@@ -66,13 +66,14 @@ class DynamicsNode(Node):
         msg.x, msg.y, msg.z = self.Omega
         self.pub_omega.publish(msg)
 
-        b3 = self.R @ self.e3
-        msg = Vector3()
-        msg.x, msg.y, msg.z = b3
-        self.pub_b3.publish(msg)
+        q = rotmat_to_quat(self.R)
+        qmsg = Quaternion()
+        qmsg.x, qmsg.y, qmsg.z, qmsg.w = q
+        self.pub_orientation.publish(qmsg)
 
         self.log_counter += 1
         if self.log_counter % 500 == 0:
+            b3 = self.R @ self.e3
             self.get_logger().info(
                 f'x=({self.x[0]:.2f}, {self.x[1]:.2f}, {self.x[2]:.2f}), '
                 f'b3=({b3[0]:.2f}, {b3[1]:.2f}, {b3[2]:.2f}), '

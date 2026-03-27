@@ -19,13 +19,13 @@ class TrajectoryNode(Node):
         xd = Vector3()
         vd = Vector3()
 
-        xd.x = 0.3 * np.sin(0.5 * self.t)
-        xd.y = 0.3 * np.cos(0.5 * self.t)
-        xd.z = 1.0 + 0.2 * np.sin(0.5 * self.t)
+        xd.x = 0.5
+        xd.y = 0.3 
+        xd.z = 1.0
 
-        vd.x = 0.15 * np.cos(0.5 * self.t)
-        vd.y = -0.15 * np.sin(0.5 * self.t)
-        vd.z = 0.1 * np.cos(0.5 * self.t)
+        vd.x = 0.0
+        vd.y = 0.0
+        vd.z = 0.0
 
         self.pub_xd.publish(xd)
         self.pub_vd.publish(vd)
