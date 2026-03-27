@@ -3,53 +3,80 @@ from rclpy.node import Node
 import numpy as np
 from geometry_msgs.msg import Vector3
 
+from .utils import hat, project_to_so3
 
 class DynamicsNode(Node):
     def __init__(self):
         super().__init__('dynamics_node')
 
-        self.sub_force = self.create_subscription(
+        self.sub_u = self.create_subscription(
             Vector3, '/force', self.force_cb, 10
         )
 
         self.pub_state = self.create_publisher(Vector3, '/state', 10)
         self.pub_velocity = self.create_publisher(Vector3, '/velocity', 10)
+        self.pub_omega = self.create_publisher(Vector3, '/omega', 10)
+        self.pub_b3 = self.create_publisher(Vector3, '/b3', 10)
+
+        self.m = 1.0
+        self.g = 9.81
+        self.J = np.diag([0.02, 0.02, 0.04])
+        self.J_inv = np.linalg.inv(self.J)
+        self.e3 = np.array([0.0, 0.0, 1.0])
 
         self.x = np.zeros(3)
         self.v = np.zeros(3)
+        self.R = np.eye(3)
+        self.Omega = np.zeros(3)
 
-        self.u = np.zeros(3)   # 控制器给出的“总加速度项”
+        self.M = np.zeros(3)
+        self.f = self.m * self.g
+
         self.dt = 0.002
-
         self.log_counter = 0
         self.timer = self.create_timer(self.dt, self.update)
 
     def force_cb(self, msg):
-        self.u = np.array([msg.x, msg.y, msg.z], dtype=float)
+        self.M = np.array([msg.x, msg.y, 0.0], dtype=float)
+        self.f = float(msg.z)
 
     def update(self):
-        g = 9.81
-        e3 = np.array([0.0, 0.0, 1.0])
-
         xdot = self.v
-        vdot = self.u - g * e3 # 简单的点质量模型，u是总加速度项
+        vdot = self.g * self.e3 - (self.f / self.m) * (self.R @ self.e3)
+        Rdot = self.R @ hat(self.Omega)
+        Omegadot = self.J_inv @ (
+            self.M - np.cross(self.Omega, self.J @ self.Omega)
+        )
 
         self.x += xdot * self.dt
         self.v += vdot * self.dt
+        self.R += Rdot * self.dt
+        self.R = project_to_so3(self.R)
+        self.Omega += Omegadot * self.dt
 
-        state_msg = Vector3()
-        state_msg.x, state_msg.y, state_msg.z = self.x
-        self.pub_state.publish(state_msg)
+        msg = Vector3()
+        msg.x, msg.y, msg.z = self.x
+        self.pub_state.publish(msg)
 
-        vel_msg = Vector3()
-        vel_msg.x, vel_msg.y, vel_msg.z = self.v
-        self.pub_velocity.publish(vel_msg)
+        msg = Vector3()
+        msg.x, msg.y, msg.z = self.v
+        self.pub_velocity.publish(msg)
+
+        msg = Vector3()
+        msg.x, msg.y, msg.z = self.Omega
+        self.pub_omega.publish(msg)
+
+        b3 = self.R @ self.e3
+        msg = Vector3()
+        msg.x, msg.y, msg.z = b3
+        self.pub_b3.publish(msg)
 
         self.log_counter += 1
         if self.log_counter % 500 == 0:
             self.get_logger().info(
                 f'x=({self.x[0]:.2f}, {self.x[1]:.2f}, {self.x[2]:.2f}), '
-                f'v=({self.v[0]:.2f}, {self.v[1]:.2f}, {self.v[2]:.2f})'
+                f'b3=({b3[0]:.2f}, {b3[1]:.2f}, {b3[2]:.2f}), '
+                f'Omega=({self.Omega[0]:.2f}, {self.Omega[1]:.2f}, {self.Omega[2]:.2f})'
             )
 
 
