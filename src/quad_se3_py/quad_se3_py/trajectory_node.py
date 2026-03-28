@@ -1,35 +1,48 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
-from geometry_msgs.msg import Vector3
+
+from quad_se3_msgs.msg import TrajectoryPoint
 
 
 class TrajectoryNode(Node):
     def __init__(self):
         super().__init__('trajectory_node')
-
-        self.pub_xd = self.create_publisher(Vector3, '/xd', 10)
-        self.pub_vd = self.create_publisher(Vector3, '/vd', 10)
-
-        self.t = 0.0
+        self.pub = self.create_publisher(TrajectoryPoint, '/trajectory', 10)
         self.dt = 0.01
         self.timer = self.create_timer(self.dt, self.update)
+        self.t = 0.0
 
     def update(self):
-        xd = Vector3()
-        vd = Vector3()
+        msg = TrajectoryPoint()
+        msg.stamp = self.get_clock().now().to_msg()
 
-        xd.x = 0.5
-        xd.y = 0.3 
-        xd.z = 1.0
+        # 先用悬停点
+        msg.position.x = 0.5
+        msg.position.y = 0.3
+        msg.position.z = 5.0
 
-        vd.x = 0.0
-        vd.y = 0.0
-        vd.z = 0.0
+        msg.velocity.x = 0.0
+        msg.velocity.y = 0.0
+        msg.velocity.z = 0.0
 
-        self.pub_xd.publish(xd)
-        self.pub_vd.publish(vd)
+        msg.acceleration.x = 0.0
+        msg.acceleration.y = 0.0
+        msg.acceleration.z = 0.0
 
+        msg.b1d.x = 1.0
+        msg.b1d.y = 0.0
+        msg.b1d.z = 0.0
+
+        msg.omega_d.x = 0.0
+        msg.omega_d.y = 0.0
+        msg.omega_d.z = 0.0
+
+        msg.omega_dot_d.x = 0.0
+        msg.omega_dot_d.y = 0.0
+        msg.omega_dot_d.z = 0.0
+
+        self.pub.publish(msg)
         self.t += self.dt
 
 

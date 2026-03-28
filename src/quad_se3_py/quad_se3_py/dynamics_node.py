@@ -1,8 +1,8 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
-from geometry_msgs.msg import Vector3, Quaternion
 
+from quad_se3_msgs.msg import QuadState, ControlInput
 from .utils import hat, project_to_so3, rotmat_to_quat
 
 class DynamicsNode(Node):
@@ -10,13 +10,10 @@ class DynamicsNode(Node):
         super().__init__('dynamics_node')
 
         self.sub_u = self.create_subscription(
-            Vector3, '/force', self.force_cb, 10
+            ControlInput, '/control_input', self.control_cb, 10
         )
 
-        self.pub_state = self.create_publisher(Vector3, '/state', 10)
-        self.pub_velocity = self.create_publisher(Vector3, '/velocity', 10)
-        self.pub_omega = self.create_publisher(Vector3, '/omega', 10)
-        self.pub_orientation = self.create_publisher(Quaternion, '/orientation', 10)
+        self.pub = self.create_publisher(QuadState, '/quad_state', 10)
 
         self.m = 1.0
         self.g = 9.81
@@ -36,9 +33,13 @@ class DynamicsNode(Node):
         self.log_counter = 0
         self.timer = self.create_timer(self.dt, self.update)
 
-    def force_cb(self, msg):
-        self.M = np.array([msg.x, msg.y, 0.0], dtype=float)
-        self.f = float(msg.z)
+    def control_cb(self, msg):
+        self.f = float(msg.thrust)
+        self.M = np.array([
+            msg.moment.x,
+            msg.moment.y,
+            msg.moment.z
+        ], dtype=float)
 
     def update(self):
         xdot = self.v
@@ -54,22 +55,17 @@ class DynamicsNode(Node):
         self.R = project_to_so3(self.R)
         self.Omega += Omegadot * self.dt
 
-        msg = Vector3()
-        msg.x, msg.y, msg.z = self.x
-        self.pub_state.publish(msg)
-
-        msg = Vector3()
-        msg.x, msg.y, msg.z = self.v
-        self.pub_velocity.publish(msg)
-
-        msg = Vector3()
-        msg.x, msg.y, msg.z = self.Omega
-        self.pub_omega.publish(msg)
-
         q = rotmat_to_quat(self.R)
-        qmsg = Quaternion()
-        qmsg.x, qmsg.y, qmsg.z, qmsg.w = q
-        self.pub_orientation.publish(qmsg)
+
+        msg = QuadState()
+        msg.stamp = self.get_clock().now().to_msg()
+
+        msg.position.x, msg.position.y, msg.position.z = self.x
+        msg.velocity.x, msg.velocity.y, msg.velocity.z = self.v
+        msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w = q
+        msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z = self.Omega
+
+        self.pub.publish(msg)
 
         self.log_counter += 1
         if self.log_counter % 500 == 0:

@@ -72,3 +72,37 @@ def quat_to_rotmat(q):
         [2*(x*z - y*w),       2*(y*z + x*w),     1 - 2*(x*x + y*y)]
     ])
     return R
+
+def compute_Rd_and_derivatives(b3d, b1d, b3d_dot=None, b1d_dot=None):
+    b3d = normalize(b3d)
+    b1c = b1d
+    b2d = normalize(np.cross(b3d, b1c))
+    b1d_orth = np.cross(b2d, b3d)
+    Rd = np.column_stack((b1d_orth, b2d, b3d))
+
+    # 先给一个可运行版本：若未提供导数，则近似为 0
+    if b3d_dot is None:
+        Rd_dot = np.zeros((3, 3))
+        Omega_d = np.zeros(3)
+        Omega_dot_d = np.zeros(3)
+        return Rd, Rd_dot, Omega_d, Omega_dot_d
+    
+    # 这里给简化的一阶构造，够跑完整框架
+    c = np.cross(b3d, b1c)
+    c_norm = np.linalg.norm(c)
+    if c_norm < 1e-8:
+        Rd_dot = np.zeros((3, 3))
+        Omega_d = np.zeros(3)
+        Omega_dot_d = np.zeros(3)
+        return Rd, Rd_dot, Omega_d, Omega_dot_d
+
+    c_dot = np.cross(b3d_dot, b1c)
+    b2d_dot = c_dot / c_norm - c * (np.dot(c, c_dot) / (c_norm**3))
+    b1d_dot_orth = np.cross(b2d_dot, b3d) + np.cross(b2d, b3d_dot)
+
+    Rd_dot = np.column_stack((b1d_dot_orth, b2d_dot, b3d_dot))
+    Omega_hat_d = Rd.T @ Rd_dot
+    Omega_d = vee(Omega_hat_d)
+
+    Omega_dot_d = np.zeros(3)
+    return Rd, Rd_dot, Omega_d, Omega_dot_d

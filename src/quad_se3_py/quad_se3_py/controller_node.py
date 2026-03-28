@@ -1,108 +1,116 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
-from geometry_msgs.msg import Vector3, Quaternion
 
-from .utils import normalize, vee, quat_to_rotmat
+from quad_se3_msgs.msg import QuadState, ControlInput, TrajectoryPoint
+from .utils import normalize, vee, quat_to_rotmat, hat, compute_Rd_and_derivatives
 
 
 class ControllerNode(Node):
     def __init__(self):
         super().__init__('controller_node')
 
-        self.sub_state = self.create_subscription(Vector3, '/state', self.state_cb, 10)
-        self.sub_velocity = self.create_subscription(Vector3, '/velocity', self.velocity_cb, 10)
-        self.sub_xd = self.create_subscription(Vector3, '/xd', self.xd_cb, 10)
-        self.sub_vd = self.create_subscription(Vector3, '/vd', self.vd_cb, 10)
-        self.sub_omega = self.create_subscription(Vector3, '/omega', self.omega_cb, 10)
-        self.sub_orientation = self.create_subscription(Quaternion, '/orientation', self.orientation_cb, 10)
-
-        self.pub_u = self.create_publisher(Vector3, '/force', 10)
+        self.sub_state = self.create_subscription(
+            QuadState, '/quad_state', self.state_cb, 10
+        )
+        self.sub_traj = self.create_subscription(
+            TrajectoryPoint, '/trajectory', self.traj_cb, 10
+        )
+        self.pub = self.create_publisher(ControlInput, '/control_input', 10)
 
         self.m = 1.0
         self.g = 9.81
+        self.J = np.diag([0.02, 0.02, 0.04])
         self.e3 = np.array([0.0, 0.0, 1.0])
 
         self.x = np.zeros(3)
         self.v = np.zeros(3)
+        self.R = np.eye(3)
+        self.Omega = np.zeros(3)
+
         self.xd = np.zeros(3)
         self.vd = np.zeros(3)
-        self.Omega = np.zeros(3)
-        self.R = np.eye(3)  
+        self.xdd = np.zeros(3)
+        self.b1d = np.array([1.0, 0.0, 0.0])
+        self.Omega_d_ref = np.zeros(3)
+        self.Omega_dot_d_ref = np.zeros(3)
 
-        self.kx = 16.0
-        self.kv = 6.0
-        self.kR_xy = 3.0
-        self.kOmega_xy = 0.5
+        self.kx = 8.0
+        self.kv = 5.0
+        self.kR = 4.0
+        self.kOmega = 0.8
 
-        self.timer = self.create_timer(0.01, self.update)
+        self.dt = 0.01
+        self.timer = self.create_timer(self.dt, self.update)
         self.log_counter = 0
-        self.waiting_log_counter = 0
-        self.get_logger().info('controller_node started')
 
     def state_cb(self, msg):
-        self.x = np.array([msg.x, msg.y, msg.z], dtype=float)
-        self.state_received = True
+        self.x = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
+        self.v = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
+        self.R = quat_to_rotmat(np.array([
+            msg.orientation.x,
+            msg.orientation.y,
+            msg.orientation.z,
+            msg.orientation.w
+        ], dtype=float))
+        self.Omega = np.array([
+            msg.angular_velocity.x,
+            msg.angular_velocity.y,
+            msg.angular_velocity.z
+        ], dtype=float)
 
-    def velocity_cb(self, msg):
-        self.v = np.array([msg.x, msg.y, msg.z], dtype=float)
+    def traj_cb(self, msg):
+        self.xd = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
+        self.vd = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
+        self.xdd = np.array([msg.acceleration.x, msg.acceleration.y, msg.acceleration.z], dtype=float)
+        self.b1d = normalize(np.array([msg.b1d.x, msg.b1d.y, msg.b1d.z], dtype=float))
+        self.Omega_d_ref = np.array([msg.omega_d.x, msg.omega_d.y, msg.omega_d.z], dtype=float)
+        self.Omega_dot_d_ref = np.array([msg.omega_dot_d.x, msg.omega_dot_d.y, msg.omega_dot_d.z], dtype=float)
 
-    def xd_cb(self, msg):
-        self.xd = np.array([msg.x, msg.y, msg.z], dtype=float)
-        self.trajectory_received = True
-
-    def vd_cb(self, msg):
-        self.vd = np.array([msg.x, msg.y, msg.z], dtype=float)
-
-    def omega_cb(self, msg):
-        self.Omega = np.array([msg.x, msg.y, msg.z], dtype=float)
-
-    def orientation_cb(self, msg):
-        q = np.array([msg.x, msg.y, msg.z, msg.w], dtype=float)
-        self.R = quat_to_rotmat(q)
 
     def update(self):
         ex = self.x - self.xd
         ev = self.v - self.vd
 
-        # 论文里常写成 A = -kx ex - kv ev - m g e3 + m xdd
-        # 这里先不加 xdd，写成 Fd 更直观
-        Fd = -self.kx * ex - self.kv * ev + self.m * self.g * self.e3
+        A = -self.kx * ex - self.kv * ev - self.m * self.g * self.e3 + self.m * self.xdd
 
-        # 如果 Fd 太小，说明不需要太大推力，直接让 b3d 指向 z 轴，避免数值不稳定
-        if np.linalg.norm(Fd) < 1e-6:
+        # 如果 A 太小，说明不需要太大推力，直接让 b3d 指向 z 轴，避免数值不稳定
+        if np.linalg.norm(A) < 1e-6:
             b3d = np.array([0.0, 0.0, 1.0])
             f = self.m * self.g
         else:
-            b3d = -normalize(Fd)        # 注意这里是 -Fd，因为Fd 是期望的总推力，而 b3d 是机体 z 轴的方向，二者是反向的
-            f = -np.dot(Fd, self.R @ self.e3)    # 推力大小：让实际推力投影到当前 -b3 上
-            f = max(0.0, f)
+            b3d = -normalize(A)        # 注意这里是 -A，因为A 是期望的总推力，而 b3d 是机体 z 轴的方向，二者是反向的
 
-        # 固定期望航向
-        b1d = np.array([1.0, 0.0, 0.0])
 
-        # 构造 Rd
-        c2 = normalize(np.cross(b3d, b1d))
-        if np.linalg.norm(c2) < 1e-6:
-            c2 = np.array([0.0, 1.0, 0.0])
+        Rd, Rd_dot, Omega_d_geom, Omega_dot_d_geom = compute_Rd_and_derivatives(
+            b3d, self.b1d
+        )
 
-        c1 = np.cross(c2, b3d)
-        Rd = np.column_stack((c1, c2, b3d))
+        # 这里先优先用几何构造结果；若你后面把参考角速度显式算好，也可以替换
+        Omega_d = Omega_d_geom
+        Omega_dot_d = Omega_dot_d_geom
 
-        e_R_mat = 0.5 * (Rd.T @ self.R - self.R.T @ Rd)
-        e_R = vee(e_R_mat)
+        e_R = 0.5 * vee(Rd.T @ self.R - self.R.T @ Rd)
+        e_Omega = self.Omega - self.R.T @ Rd @ Omega_d
 
-        e_Omega = self.Omega
+        f = -np.dot(A, self.R @ self.e3)
 
-        kR = np.array([self.kR_xy, self.kR_xy, 0.0])
-        kOmega = np.array([self.kOmega_xy, self.kOmega_xy, 0.0])
-        M = -kR * e_R - kOmega * e_Omega
+        M = (
+            -self.kR * e_R
+            -self.kOmega * e_Omega
+            + np.cross(self.Omega, self.J @ self.Omega)
+            - self.J @ (
+                hat(self.Omega) @ self.R.T @ Rd @ Omega_d
+                - self.R.T @ Rd @ Omega_dot_d
+            )
+        )
 
-        msg = Vector3()
-        msg.x = M[0]
-        msg.y = M[1]
-        msg.z = f
-        self.pub_u.publish(msg)
+        msg = ControlInput()
+        msg.thrust = float(max(0.0, f))
+        msg.moment.x = float(M[0])
+        msg.moment.y = float(M[1])
+        msg.moment.z = float(M[2])
+        self.pub.publish(msg)
 
         self.log_counter += 1
         if self.log_counter % 100 == 0:

@@ -1,0 +1,7 @@
+builtin_interfaces/Time stamp
+geometry_msgs/Vector3 position
+geometry_msgs/Vector3 velocity
+geometry_msgs/Vector3 acceleration
+geometry_msgs/Vector3 b1d
+geometry_msgs/Vector3 omega_d
+geometry_msgs/Vector3 omega_dot_d
