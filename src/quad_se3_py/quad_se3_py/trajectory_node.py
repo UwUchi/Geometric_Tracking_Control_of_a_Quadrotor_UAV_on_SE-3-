@@ -12,6 +12,7 @@ class TrajectoryNode(Node):
         self.dt = 0.01
         self.timer = self.create_timer(self.dt, self.update)
         self.t = 0.0
+        self.yaw_rate = 0.6
 
     def update(self):
         msg = TrajectoryPoint()
@@ -30,13 +31,21 @@ class TrajectoryNode(Node):
         msg.acceleration.y = 0.0
         msg.acceleration.z = 0.0
 
-        msg.b1d.x = 1.0
-        msg.b1d.y = 0.0
+        yaw = self.yaw_rate * self.t
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+
+        msg.b1d.x = float(cos_yaw)
+        msg.b1d.y = float(sin_yaw)
         msg.b1d.z = 0.0
+
+        msg.b1d_dot.x = float(-self.yaw_rate * sin_yaw)
+        msg.b1d_dot.y = float(self.yaw_rate * cos_yaw)
+        msg.b1d_dot.z = 0.0
 
         msg.omega_d.x = 0.0
         msg.omega_d.y = 0.0
-        msg.omega_d.z = 0.0
+        msg.omega_d.z = float(self.yaw_rate)
 
         msg.omega_dot_d.x = 0.0
         msg.omega_dot_d.y = 0.0

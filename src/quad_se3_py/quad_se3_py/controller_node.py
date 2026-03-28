@@ -32,8 +32,10 @@ class ControllerNode(Node):
         self.vd = np.zeros(3)
         self.xdd = np.zeros(3)
         self.b1d = np.array([1.0, 0.0, 0.0])
+        self.b1d_dot = np.zeros(3)
         self.Omega_d_ref = np.zeros(3)
         self.Omega_dot_d_ref = np.zeros(3)
+        self.Rd = np.eye(3)
 
         self.kx = 8.0
         self.kv = 5.0
@@ -64,9 +66,9 @@ class ControllerNode(Node):
         self.vd = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
         self.xdd = np.array([msg.acceleration.x, msg.acceleration.y, msg.acceleration.z], dtype=float)
         self.b1d = normalize(np.array([msg.b1d.x, msg.b1d.y, msg.b1d.z], dtype=float))
+        self.b1d_dot = np.array([msg.b1d_dot.x, msg.b1d_dot.y, msg.b1d_dot.z], dtype=float)
         self.Omega_d_ref = np.array([msg.omega_d.x, msg.omega_d.y, msg.omega_d.z], dtype=float)
         self.Omega_dot_d_ref = np.array([msg.omega_dot_d.x, msg.omega_dot_d.y, msg.omega_dot_d.z], dtype=float)
-
 
     def update(self):
         ex = self.x - self.xd
@@ -83,10 +85,13 @@ class ControllerNode(Node):
 
 
         Rd, Rd_dot, Omega_d_geom, Omega_dot_d_geom = compute_Rd_and_derivatives(
-            b3d, self.b1d
+            b3d,
+            self.b1d,
+            b1d_dot=self.b1d_dot,
+            current_Rd=self.Rd
         )
+        self.Rd = Rd
 
-        # 这里先优先用几何构造结果；若你后面把参考角速度显式算好，也可以替换
         Omega_d = Omega_d_geom
         Omega_dot_d = Omega_dot_d_geom
 
@@ -117,7 +122,7 @@ class ControllerNode(Node):
             self.get_logger().info(
                 f'x=({self.x[0]:.2f}, {self.x[1]:.2f}, {self.x[2]:.2f}), '
                 f'xd=({self.xd[0]:.2f}, {self.xd[1]:.2f}, {self.xd[2]:.2f}), '
-                f'ex=({ex[0]:.2f}, {ex[1]:.2f}, {ex[2]:.2f}), '
+                f'b1d_dot=({self.b1d_dot[0]:.2f}, {self.b1d_dot[1]:.2f}, {self.b1d_dot[2]:.2f}), '
                 f'eR=({e_R[0]:.2f}, {e_R[1]:.2f}, {e_R[2]:.2f}), '
                 f'f={f:.2f}'
             )
