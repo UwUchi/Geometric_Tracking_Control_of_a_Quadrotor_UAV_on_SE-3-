@@ -14,6 +14,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        (join('share', package_name, 'rviz'), glob('rviz/*.rviz')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -31,6 +32,7 @@ setup(
             'trajectory_node = quad_se3_py.trajectory_node:main',
             'controller_node = quad_se3_py.controller_node:main',
             'dynamics_node = quad_se3_py.dynamics_node:main',
+            'visualization_node = quad_se3_py.visualization_node:main',
         ],
     },
 )

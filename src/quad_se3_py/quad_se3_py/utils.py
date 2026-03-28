@@ -1,14 +1,17 @@
 import numpy as np
 
+
 def hat(v):
     return np.array([
         [0, -v[2], v[1]],
         [v[2], 0, -v[0]],
-        [-v[1], v[0], 0]
+        [-v[1], v[0], 0],
     ])
 
+
 def vee(M):
-    return np.array([M[2,1], M[0,2], M[1,0]])
+    return np.array([M[2, 1], M[0, 2], M[1, 0]])
+
 
 def normalize(v, eps=1e-8):
     n = np.linalg.norm(v)
@@ -25,12 +28,13 @@ def normalize_with_norm(v, eps=1e-8):
 
 
 def project_to_so3(R):
-    U, _, Vt = np.linalg.svd(R) #奇异值分解
+    U, _, Vt = np.linalg.svd(R)  # 奇异值分解
     R_proj = U @ Vt
     if np.linalg.det(R_proj) < 0:
         U[:, -1] *= -1.0
         R_proj = U @ Vt
     return R_proj
+
 
 def rotmat_to_quat(R):
     q = np.empty(4, dtype=float)  # x, y, z, w
@@ -66,6 +70,7 @@ def rotmat_to_quat(R):
     q /= np.linalg.norm(q)
     return q
 
+
 def quat_to_rotmat(q):
     x, y, z, w = q
     n = np.linalg.norm(q)
@@ -74,14 +79,30 @@ def quat_to_rotmat(q):
     x, y, z, w = q / n
 
     R = np.array([
-        [1 - 2*(y*y + z*z),   2*(x*y - z*w),     2*(x*z + y*w)],
-        [2*(x*y + z*w),       1 - 2*(x*x + z*z), 2*(y*z - x*w)],
-        [2*(x*z - y*w),       2*(y*z + x*w),     1 - 2*(x*x + y*y)]
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
     ])
     return R
 
+
+def euler_to_rotmat(rpy):
+    roll, pitch, yaw = rpy
+    cr, sr = np.cos(roll), np.sin(roll)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cy, sy = np.cos(yaw), np.sin(yaw)
+
+    return np.array([
+        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+        [-sp, cp * sr, cp * cr],
+    ])
+
+
 def normalized_vec_and_derivative(c, c_dot, eps=1e-8):
     """
+    Compute a normalized vector and its derivative.
+
     b = c / ||c||
     b_dot = c_dot / ||c|| - c * (c·c_dot) / ||c||^3
     """
@@ -100,9 +121,11 @@ def compute_Rd_and_derivatives(
     b3d_dot=None,
     b1d_dot=None,
     current_Rd=None,
-    eps=1e-8
-):  #这里没用差分近似，而是直接用解析式求导，更稳，更几何。
+    eps=1e-8,
+):  # 这里没用差分近似，而是直接用解析式求导，更稳，更几何。
     """
+    Compute the desired attitude matrix and related derivatives.
+
     输入:
         b3d      : 期望推力轴方向（通常是单位向量）
         b1d      : 用于确定航向的参考方向，不要求与 b3d 正交
@@ -112,7 +135,6 @@ def compute_Rd_and_derivatives(
     输出:
         Rd, Rd_dot, Omega_d, Omega_dot_d
     """
-
     # ---------- 1) 归一化输入 ----------
     b3d, n3 = normalize_with_norm(b3d, eps)
     if n3 < eps:

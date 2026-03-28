@@ -3,7 +3,8 @@ from rclpy.node import Node
 import numpy as np
 
 from quad_se3_msgs.msg import QuadState, ControlInput
-from .utils import hat, project_to_so3, rotmat_to_quat
+from .utils import euler_to_rotmat, hat, project_to_so3, rotmat_to_quat
+
 
 class DynamicsNode(Node):
     def __init__(self):
@@ -21,10 +22,31 @@ class DynamicsNode(Node):
         self.J_inv = np.linalg.inv(self.J)
         self.e3 = np.array([0.0, 0.0, 1.0])
 
-        self.x = np.zeros(3)
-        self.v = np.zeros(3)
-        self.R = np.eye(3)
-        self.Omega = np.zeros(3)
+        self.declare_parameter('initial_position', [0.0, 0.0, 0.0])
+        self.declare_parameter('initial_velocity', [0.0, 0.0, 0.0])
+        self.declare_parameter('initial_roll_deg', 0.0)
+        self.declare_parameter('initial_pitch_deg', 0.0)
+        self.declare_parameter('initial_yaw_deg', 0.0)
+        self.declare_parameter('initial_angular_velocity', [0.0, 0.0, 0.0])
+
+        self.x = np.array(
+            self.get_parameter('initial_position').value,
+            dtype=float,
+        )
+        self.v = np.array(
+            self.get_parameter('initial_velocity').value,
+            dtype=float,
+        )
+        initial_rpy_deg = np.array([
+            self.get_parameter('initial_roll_deg').value,
+            self.get_parameter('initial_pitch_deg').value,
+            self.get_parameter('initial_yaw_deg').value,
+        ], dtype=float)
+        self.R = euler_to_rotmat(np.deg2rad(initial_rpy_deg))
+        self.Omega = np.array(
+            self.get_parameter('initial_angular_velocity').value,
+            dtype=float,
+        )
 
         self.M = np.zeros(3)
         self.f = self.m * self.g

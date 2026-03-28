@@ -1,55 +1,33 @@
 import rclpy
 from rclpy.node import Node
-import numpy as np
 
 from quad_se3_msgs.msg import TrajectoryPoint
+from .trajectories import evaluate_trajectory
 
 
 class TrajectoryNode(Node):
     def __init__(self):
         super().__init__('trajectory_node')
         self.pub = self.create_publisher(TrajectoryPoint, '/trajectory', 10)
+        self.declare_parameter('trajectory_mode', 'hover')
         self.dt = 0.01
         self.timer = self.create_timer(self.dt, self.update)
         self.t = 0.0
-        self.yaw_rate = 0.6
+        self.trajectory_mode = self.get_parameter('trajectory_mode').value
 
     def update(self):
         msg = TrajectoryPoint()
         msg.stamp = self.get_clock().now().to_msg()
 
-        # 先用悬停点
-        msg.position.x = 0.5
-        msg.position.y = 0.3
-        msg.position.z = 5.0
+        sample = evaluate_trajectory(self.trajectory_mode, self.t)
 
-        msg.velocity.x = 0.0
-        msg.velocity.y = 0.0
-        msg.velocity.z = 0.0
-
-        msg.acceleration.x = 0.0
-        msg.acceleration.y = 0.0
-        msg.acceleration.z = 0.0
-
-        yaw = self.yaw_rate * self.t
-        cos_yaw = np.cos(yaw)
-        sin_yaw = np.sin(yaw)
-
-        msg.b1d.x = float(cos_yaw)
-        msg.b1d.y = float(sin_yaw)
-        msg.b1d.z = 0.0
-
-        msg.b1d_dot.x = float(-self.yaw_rate * sin_yaw)
-        msg.b1d_dot.y = float(self.yaw_rate * cos_yaw)
-        msg.b1d_dot.z = 0.0
-
-        msg.omega_d.x = 0.0
-        msg.omega_d.y = 0.0
-        msg.omega_d.z = float(self.yaw_rate)
-
-        msg.omega_dot_d.x = 0.0
-        msg.omega_dot_d.y = 0.0
-        msg.omega_dot_d.z = 0.0
+        msg.position.x, msg.position.y, msg.position.z = sample['position']
+        msg.velocity.x, msg.velocity.y, msg.velocity.z = sample['velocity']
+        msg.acceleration.x, msg.acceleration.y, msg.acceleration.z = sample['acceleration']
+        msg.b1d.x, msg.b1d.y, msg.b1d.z = sample['b1d']
+        msg.b1d_dot.x, msg.b1d_dot.y, msg.b1d_dot.z = sample['b1d_dot']
+        msg.omega_d.x, msg.omega_d.y, msg.omega_d.z = sample['omega_d']
+        msg.omega_dot_d.x, msg.omega_dot_d.y, msg.omega_dot_d.z = sample['omega_dot_d']
 
         self.pub.publish(msg)
         self.t += self.dt

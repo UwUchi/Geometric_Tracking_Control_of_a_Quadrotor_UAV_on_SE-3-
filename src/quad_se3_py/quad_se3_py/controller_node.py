@@ -3,7 +3,8 @@ from rclpy.node import Node
 import numpy as np
 
 from quad_se3_msgs.msg import QuadState, ControlInput, TrajectoryPoint
-from .utils import normalize, vee, quat_to_rotmat, hat, compute_Rd_and_derivatives
+from .reference import compute_desired_attitude_from_state
+from .utils import hat, normalize, quat_to_rotmat, vee
 
 
 class ControllerNode(Node):
@@ -64,36 +65,35 @@ class ControllerNode(Node):
     def traj_cb(self, msg):
         self.xd = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
         self.vd = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
-        self.xdd = np.array([msg.acceleration.x, msg.acceleration.y, msg.acceleration.z], dtype=float)
+        self.xdd = np.array(
+            [msg.acceleration.x, msg.acceleration.y, msg.acceleration.z],
+            dtype=float,
+        )
         self.b1d = normalize(np.array([msg.b1d.x, msg.b1d.y, msg.b1d.z], dtype=float))
         self.b1d_dot = np.array([msg.b1d_dot.x, msg.b1d_dot.y, msg.b1d_dot.z], dtype=float)
         self.Omega_d_ref = np.array([msg.omega_d.x, msg.omega_d.y, msg.omega_d.z], dtype=float)
-        self.Omega_dot_d_ref = np.array([msg.omega_dot_d.x, msg.omega_dot_d.y, msg.omega_dot_d.z], dtype=float)
+        self.Omega_dot_d_ref = np.array(
+            [msg.omega_dot_d.x, msg.omega_dot_d.y, msg.omega_dot_d.z],
+            dtype=float,
+        )
 
     def update(self):
-        ex = self.x - self.xd
-        ev = self.v - self.vd
-
-        A = -self.kx * ex - self.kv * ev - self.m * self.g * self.e3 + self.m * self.xdd
-
-        # 如果 A 太小，说明不需要太大推力，直接让 b3d 指向 z 轴，避免数值不稳定
-        if np.linalg.norm(A) < 1e-6:
-            b3d = np.array([0.0, 0.0, 1.0])
-            f = self.m * self.g
-        else:
-            b3d = -normalize(A)        # 注意这里是 -A，因为A 是期望的总推力，而 b3d 是机体 z 轴的方向，二者是反向的
-
-
-        Rd, Rd_dot, Omega_d_geom, Omega_dot_d_geom = compute_Rd_and_derivatives(
-            b3d,
-            self.b1d,
+        Rd, _, Omega_d, Omega_dot_d, A = compute_desired_attitude_from_state(
+            x=self.x,
+            v=self.v,
+            xd=self.xd,
+            vd=self.vd,
+            xdd=self.xdd,
+            b1d=self.b1d,
             b1d_dot=self.b1d_dot,
-            current_Rd=self.Rd
+            current_Rd=self.Rd,
+            m=self.m,
+            g=self.g,
+            e3=self.e3,
+            kx=self.kx,
+            kv=self.kv,
         )
         self.Rd = Rd
-
-        Omega_d = Omega_d_geom
-        Omega_dot_d = Omega_dot_d_geom
 
         e_R = 0.5 * vee(Rd.T @ self.R - self.R.T @ Rd)
         e_Omega = self.Omega - self.R.T @ Rd @ Omega_d
@@ -102,7 +102,7 @@ class ControllerNode(Node):
 
         M = (
             -self.kR * e_R
-            -self.kOmega * e_Omega
+            - self.kOmega * e_Omega
             + np.cross(self.Omega, self.J @ self.Omega)
             - self.J @ (
                 hat(self.Omega) @ self.R.T @ Rd @ Omega_d
