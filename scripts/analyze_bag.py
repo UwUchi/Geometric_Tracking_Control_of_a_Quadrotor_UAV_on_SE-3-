@@ -30,7 +30,11 @@ TOPICS = {
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Analyze quadrotor rosbag data.')
-    parser.add_argument('bag_path', help='Path to a rosbag2 directory')
+    parser.add_argument(
+        'bag_path',
+        nargs='?',
+        help='Path to a rosbag2 directory, defaults to the latest bag under bags/',
+    )
     parser.add_argument(
         '--output-dir',
         help='Directory to write plots and summary into',
@@ -40,6 +44,21 @@ def parse_args():
         help='Override output case name, defaults to the bag directory name',
     )
     return parser.parse_args()
+
+
+def resolve_bag_path(bag_path_arg):
+    if bag_path_arg:
+        return Path(bag_path_arg).resolve()
+
+    bags_dir = REPO_ROOT / 'bags'
+    if not bags_dir.is_dir():
+        raise RuntimeError(f'No bags directory found at {bags_dir}')
+
+    bag_dirs = [path for path in bags_dir.iterdir() if path.is_dir()]
+    if not bag_dirs:
+        raise RuntimeError(f'No bag directories found under {bags_dir}')
+
+    return max(bag_dirs, key=lambda path: path.stat().st_mtime).resolve()
 
 
 def read_bag_messages(bag_path):
@@ -298,7 +317,7 @@ def write_summary(output_dir, state_data, analysis_data):
 
 def main():
     args = parse_args()
-    bag_path = Path(args.bag_path).resolve()
+    bag_path = resolve_bag_path(args.bag_path)
     case_name = args.case_name or bag_path.name
     output_dir = (
         Path(args.output_dir).resolve()
