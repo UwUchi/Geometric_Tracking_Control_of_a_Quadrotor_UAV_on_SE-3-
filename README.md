@@ -1,6 +1,6 @@
 # Geometric Tracking Control of a Quadrotor UAV on SE(3)
 
-一个基于 ROS 2 Humble 的四旋翼 SE(3) 几何跟踪控制复现项目。当前工作区包含：
+一个基于 ROS 2 Humble 的四旋翼 SE(3) 几何跟踪控制复现项目。工作区当前包含：
 
 - `quad_se3_msgs`：状态、控制输入、轨迹点消息定义
 - `quad_se3_py`：轨迹源、控制器、动力学仿真、RViz 可视化
@@ -152,13 +152,7 @@ initial_yaw_deg:=0.0
 
 ## Trajectory Modes
 
-当前 `trajectory_node` 支持这些模式：
-
-- `hover`
-- `paper_case_1_helix`
-- `paper_case_2_recovery_reference`
-
-说明：
+`trajectory_node` 当前支持这些模式：
 
 - `hover`：用于基础闭环验证
 - `paper_case_1_helix`：对应论文风格的空间轨迹跟踪演示
@@ -181,6 +175,10 @@ cd /home/sachan/ros2_p_ws
 ./scripts/run_case1.sh
 ```
 
+- 脚本会先启动 rosbag recorder，再启动仿真，尽量避免漏掉开头数据
+- 停止后会自动分析最新 bag
+- 分析结果默认写到带时间戳的目录，不会覆盖上一次结果
+
 如果不想启动 RViz：
 
 ```bash
@@ -194,6 +192,10 @@ cd /home/sachan/ros2_p_ws
 ./scripts/run_case2.sh
 ```
 
+- 脚本同样会先启动 recorder，再启动仿真
+- 停止后自动分析最新 bag
+- 分析结果默认按 bag 目录名输出
+
 默认初始姿态是：
 
 ```text
@@ -202,7 +204,7 @@ pitch = 0 deg
 yaw = 0 deg
 ```
 
-你也可以覆盖：
+也可以这样覆盖：
 
 ```bash
 INITIAL_ROLL_DEG=175 USE_RVIZ=false ./scripts/run_case2.sh
@@ -244,6 +246,10 @@ cd /home/sachan/ros2_p_ws
 python3 scripts/analyze_bag.py
 ```
 
+- 自动选择 `bags/` 下最新的一个 bag
+- 输出目录默认使用该 bag 的目录名，因此会保留时间戳
+- 不会覆盖之前的分析结果
+
 ### 分析指定 bag
 
 ```bash
@@ -260,7 +266,13 @@ python3 scripts/analyze_bag.py bags/case1_helix_20260328_204828 \
 分析输出默认写到：
 
 ```text
-plots/<case_name>/
+plots/<bag_directory_name>/
+```
+
+例如：
+
+```text
+plots/case1_helix_20260328_204828/
 ```
 
 包含：
@@ -327,7 +339,21 @@ source install/setup.bash
 
 项目中的 `record_bag.sh` 已经会自动加载当前工作区环境。
 
-### 2. VS Code / Pylance 无法解析 `quad_se3_py`
+### 2. 分析结果被覆盖
+
+现在默认不会覆盖。
+
+`analyze_bag.py` 会把输出写到：
+
+```text
+plots/<bag_directory_name>/
+```
+
+也就是说，只要 bag 目录带时间戳，分析结果也会自动带时间戳。
+
+只有在你显式传入 `--output-dir` 时，才会写到你指定的固定目录。
+
+### 3. VS Code / Pylance 无法解析 `quad_se3_py`
 
 如果编辑器提示导入错误，重载 VS Code 窗口即可：
 
@@ -335,22 +361,22 @@ source install/setup.bash
 Ctrl+Shift+P -> Developer: Reload Window
 ```
 
-### 3. RViz 镜头不跟随
+### 4. RViz 镜头不跟随
 
 检查 `Views` 面板：
 
 - `Type` 为 `Orbit`
 - `Target Frame` 为 `quad_actual`
 
-### 4. 画面里坐标架太多
+### 5. 画面里坐标架太多
 
-当前 RViz 同时可能显示：
+RViz 里当前可能同时显示：
 
 - TF
 - Marker 里的实际姿态轴
 - Marker 里的期望姿态轴
 
-如果你想更干净，可以在 RViz 的 `Markers` 或 `TF` 显示里手动关掉一部分。
+如果想让画面更干净，可以在 RViz 的 `Markers` 或 `TF` 显示里手动关掉一部分。
 
 ## Development Notes
 

@@ -98,11 +98,12 @@ def vector3_to_array(msg):
 
 
 def sample_state(messages):
-    times, positions, velocities, rotations, omegas = [], [], [], [], []
+    times, positions, velocities, accelerations, rotations, omegas = [], [], [], [], [], []
     for timestamp_ns, msg in messages:
         times.append(stamp_to_sec(msg.stamp, timestamp_ns))
         positions.append(vector3_to_array(msg.position))
         velocities.append(vector3_to_array(msg.velocity))
+        accelerations.append(vector3_to_array(msg.acceleration))
         rotations.append(
             quat_to_rotmat(
                 np.array([
@@ -118,6 +119,7 @@ def sample_state(messages):
         'time': np.array(times, dtype=float),
         'position': np.array(positions, dtype=float),
         'velocity': np.array(velocities, dtype=float),
+        'acceleration': np.array(accelerations, dtype=float),
         'rotation': np.array(rotations, dtype=float),
         'omega': np.array(omegas, dtype=float),
     }
@@ -129,20 +131,18 @@ def sample_trajectory(messages):
         'position': [],
         'velocity': [],
         'acceleration': [],
+        'jerk': [],
         'b1d': [],
         'b1d_dot': [],
-        'omega_d': [],
-        'omega_dot_d': [],
     }
     for timestamp_ns, msg in messages:
         times.append(stamp_to_sec(msg.stamp, timestamp_ns))
         fields['position'].append(vector3_to_array(msg.position))
         fields['velocity'].append(vector3_to_array(msg.velocity))
         fields['acceleration'].append(vector3_to_array(msg.acceleration))
+        fields['jerk'].append(vector3_to_array(msg.jerk))
         fields['b1d'].append(vector3_to_array(msg.b1d))
         fields['b1d_dot'].append(vector3_to_array(msg.b1d_dot))
-        fields['omega_d'].append(vector3_to_array(msg.omega_d))
-        fields['omega_dot_d'].append(vector3_to_array(msg.omega_dot_d))
     return {
         'time': np.array(times, dtype=float),
         **{key: np.array(value, dtype=float) for key, value in fields.items()},
@@ -184,6 +184,9 @@ def analyze(state_data, trajectory_data):
     ref_acceleration = interp_vectors(
         trajectory_data['time'], trajectory_data['acceleration'], target_times
     )
+    ref_jerk = interp_vectors(
+        trajectory_data['time'], trajectory_data['jerk'], target_times
+    )
     ref_b1d = interp_vectors(
         trajectory_data['time'], trajectory_data['b1d'], target_times
     )
@@ -203,9 +206,11 @@ def analyze(state_data, trajectory_data):
         Rd, _, Omega_d, _, _ = compute_desired_attitude_from_state(
             x=state_data['position'][index],
             v=state_data['velocity'][index],
+            x_dd=state_data['acceleration'][index],
             xd=ref_position[index],
             vd=ref_velocity[index],
             xdd=ref_acceleration[index],
+            xd_ddd=ref_jerk[index],
             b1d=ref_b1d[index],
             b1d_dot=ref_b1d_dot[index],
             current_Rd=current_Rd,
@@ -322,7 +327,7 @@ def main():
     output_dir = (
         Path(args.output_dir).resolve()
         if args.output_dir
-        else REPO_ROOT / 'plots' / case_name
+        else REPO_ROOT / 'plots' / bag_path.name
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 

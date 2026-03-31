@@ -3,7 +3,7 @@ from rclpy.node import Node
 import numpy as np
 
 from quad_se3_msgs.msg import QuadState, ControlInput, TrajectoryPoint
-from .reference import compute_desired_attitude_from_state
+from .reference import compute_desired_attitude_and_force_from_state
 from .utils import hat, normalize, quat_to_rotmat, vee
 
 
@@ -26,16 +26,18 @@ class ControllerNode(Node):
 
         self.x = np.zeros(3)
         self.v = np.zeros(3)
+        self.vdot = np.zeros(3)  # 为了解析计算 Rd_dot 和 Omega_d，增加 vdot 状态。
         self.R = np.eye(3)
         self.Omega = np.zeros(3)
 
         self.xd = np.zeros(3)
         self.vd = np.zeros(3)
-        self.xdd = np.zeros(3)
+        self.xd_dd = np.zeros(3)
+        self.xd_ddd = np.zeros(3)
         self.b1d = np.array([1.0, 0.0, 0.0])
         self.b1d_dot = np.zeros(3)
-        self.Omega_d_ref = np.zeros(3)
-        self.Omega_dot_d_ref = np.zeros(3)
+        self.Omega_d = np.zeros(3)
+        self.Omega_d_dot = np.zeros(3)
         self.Rd = np.eye(3)
 
         self.kx = 8.0
@@ -50,6 +52,11 @@ class ControllerNode(Node):
     def state_cb(self, msg):
         self.x = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
         self.v = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
+        self.vdot = np.array(
+            [msg.acceleration.x, msg.acceleration.y, msg.acceleration.z],
+            dtype=float,
+        )
+
         self.R = quat_to_rotmat(np.array([
             msg.orientation.x,
             msg.orientation.y,
@@ -65,25 +72,26 @@ class ControllerNode(Node):
     def traj_cb(self, msg):
         self.xd = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
         self.vd = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
-        self.xdd = np.array(
+        self.xd_dd = np.array(
             [msg.acceleration.x, msg.acceleration.y, msg.acceleration.z],
+            dtype=float,
+        )
+        self.xd_ddd = np.array(
+            [msg.jerk.x, msg.jerk.y, msg.jerk.z],
             dtype=float,
         )
         self.b1d = normalize(np.array([msg.b1d.x, msg.b1d.y, msg.b1d.z], dtype=float))
         self.b1d_dot = np.array([msg.b1d_dot.x, msg.b1d_dot.y, msg.b1d_dot.z], dtype=float)
-        self.Omega_d_ref = np.array([msg.omega_d.x, msg.omega_d.y, msg.omega_d.z], dtype=float)
-        self.Omega_dot_d_ref = np.array(
-            [msg.omega_dot_d.x, msg.omega_dot_d.y, msg.omega_dot_d.z],
-            dtype=float,
-        )
 
     def update(self):
-        Rd, _, Omega_d, Omega_dot_d, A = compute_desired_attitude_from_state(
+        Rd, _, Omega_d, Omega_dot_d, A = compute_desired_attitude_and_force_from_state(
             x=self.x,
             v=self.v,
+            x_dd=self.vdot,  # 直接用 vdot 计算 Rd_dot 和 Omega_d，避免数值差分噪声。
             xd=self.xd,
             vd=self.vd,
-            xdd=self.xdd,
+            xd_dd=self.xd_dd,
+            xd_ddd=self.xd_ddd,
             b1d=self.b1d,
             b1d_dot=self.b1d_dot,
             current_Rd=self.Rd,

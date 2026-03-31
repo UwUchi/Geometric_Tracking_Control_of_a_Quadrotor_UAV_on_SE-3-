@@ -38,18 +38,18 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+echo "Starting bag recording..."
+"${script_dir}/record_bag.sh" "${case_name}" &
+record_pid=$!
+
+sleep 1
+
 echo "Starting simulation with trajectory_mode=${trajectory_mode}..."
 ROS_LOG_DIR="${workspace_dir}/log/ros2" \
   ros2 launch quad_se3_py sim_viz.launch.py \
   use_rviz:="${use_rviz}" \
   trajectory_mode:="${trajectory_mode}" &
 launch_pid=$!
-
-sleep 3
-
-echo "Starting bag recording..."
-"${script_dir}/record_bag.sh" "${case_name}" &
-record_pid=$!
 
 echo "Simulation and recording are running."
 echo "Press Ctrl+C when you want to stop and analyze the latest bag."
@@ -66,4 +66,4 @@ launch_pid=""
 trap - EXIT INT TERM
 
 echo "Analyzing latest bag..."
-python3 "${script_dir}/analyze_bag.py" --case-name "${case_name}"
+python3 "${script_dir}/analyze_bag.py"

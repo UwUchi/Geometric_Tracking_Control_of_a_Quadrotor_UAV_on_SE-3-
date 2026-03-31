@@ -24,10 +24,9 @@ class TrajectoryNode(Node):
         msg.position.x, msg.position.y, msg.position.z = sample['position']
         msg.velocity.x, msg.velocity.y, msg.velocity.z = sample['velocity']
         msg.acceleration.x, msg.acceleration.y, msg.acceleration.z = sample['acceleration']
+        msg.jerk.x, msg.jerk.y, msg.jerk.z = sample['jerk']
         msg.b1d.x, msg.b1d.y, msg.b1d.z = sample['b1d']
         msg.b1d_dot.x, msg.b1d_dot.y, msg.b1d_dot.z = sample['b1d_dot']
-        msg.omega_d.x, msg.omega_d.y, msg.omega_d.z = sample['omega_d']
-        msg.omega_dot_d.x, msg.omega_dot_d.y, msg.omega_dot_d.z = sample['omega_dot_d']
 
         self.pub.publish(msg)
         self.t += self.dt

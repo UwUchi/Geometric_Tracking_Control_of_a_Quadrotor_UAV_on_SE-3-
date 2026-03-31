@@ -48,12 +48,14 @@ class VisualizationNode(Node):
 
         self.x = np.zeros(3, dtype=float)
         self.v = np.zeros(3, dtype=float)
+        self.x_dd = np.zeros(3, dtype=float)
         self.q = np.array([0.0, 0.0, 0.0, 1.0], dtype=float)
         self.Rd = np.eye(3)
 
         self.xd = np.zeros(3, dtype=float)
         self.vd = np.zeros(3, dtype=float)
         self.xdd = np.zeros(3, dtype=float)
+        self.xd_ddd = np.zeros(3, dtype=float)
         self.b1d = np.array([1.0, 0.0, 0.0], dtype=float)
         self.b1d_dot = np.zeros(3, dtype=float)
 
@@ -63,6 +65,10 @@ class VisualizationNode(Node):
     def state_cb(self, msg):
         self.x = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
         self.v = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
+        self.x_dd = np.array(
+            [msg.acceleration.x, msg.acceleration.y, msg.acceleration.z],
+            dtype=float,
+        )
         self.q = np.array(
             [
                 msg.orientation.x,
@@ -81,6 +87,7 @@ class VisualizationNode(Node):
             [msg.acceleration.x, msg.acceleration.y, msg.acceleration.z],
             dtype=float,
         )
+        self.xd_ddd = np.array([msg.jerk.x, msg.jerk.y, msg.jerk.z], dtype=float)
         self.b1d = np.array([msg.b1d.x, msg.b1d.y, msg.b1d.z], dtype=float)
         self.b1d_dot = np.array(
             [msg.b1d_dot.x, msg.b1d_dot.y, msg.b1d_dot.z],
@@ -102,6 +109,8 @@ class VisualizationNode(Node):
             e3=self.e3,
             kx=self.kx,
             kv=self.kv,
+            x_dd=self.x_dd,
+            xd_ddd=self.xd_ddd,
         )
         self.Rd = Rd
         desired_q = rotmat_to_quat(Rd)

@@ -86,7 +86,7 @@ def quat_to_rotmat(q):
     return R
 
 
-def euler_to_rotmat(rpy):
+def euler_to_rotmat(rpy):  # 目前 rpy 主要是描述初始姿态。
     roll, pitch, yaw = rpy
     cr, sr = np.cos(roll), np.sin(roll)
     cp, sp = np.cos(pitch), np.sin(pitch)
@@ -202,7 +202,7 @@ def compute_Rd_and_derivatives(
     Omega_d = vee(Omega_hat_d)
 
     # ---------- 6) 先给简化版 Omega_dot_d ----------
-    # 论文控制律里会用到 Omega_d_dot，但你当前复现阶段先置零通常能跑通框架。
+    # 论文控制律里会用到 Omega_d_dot，但当前复现阶段先置零通常能跑通框架。
     Omega_dot_d = np.zeros(3)
 
     return Rd, Rd_dot, Omega_d, Omega_dot_d

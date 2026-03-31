@@ -41,6 +41,12 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+echo "Starting bag recording..."
+"${script_dir}/record_bag.sh" "${case_name}" &
+record_pid=$!
+
+sleep 1
+
 echo "Starting recovery case with trajectory_mode=${trajectory_mode}..."
 echo "Initial RPY [deg] = (${initial_roll_deg}, ${initial_pitch_deg}, ${initial_yaw_deg})"
 ROS_LOG_DIR="${workspace_dir}/log/ros2" \
@@ -51,12 +57,6 @@ ROS_LOG_DIR="${workspace_dir}/log/ros2" \
   initial_pitch_deg:="${initial_pitch_deg}" \
   initial_yaw_deg:="${initial_yaw_deg}" &
 launch_pid=$!
-
-sleep 3
-
-echo "Starting bag recording..."
-"${script_dir}/record_bag.sh" "${case_name}" &
-record_pid=$!
 
 echo "Simulation and recording are running."
 echo "Press Ctrl+C when you want to stop and analyze the latest bag."
@@ -73,4 +73,4 @@ launch_pid=""
 trap - EXIT INT TERM
 
 echo "Analyzing latest bag..."
-python3 "${script_dir}/analyze_bag.py" --case-name "${case_name}"
+python3 "${script_dir}/analyze_bag.py"

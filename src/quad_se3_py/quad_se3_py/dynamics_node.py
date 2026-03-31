@@ -37,6 +37,7 @@ class DynamicsNode(Node):
             self.get_parameter('initial_velocity').value,
             dtype=float,
         )
+        self.vdot = np.zeros(3)  # 为了解析计算 Rd_dot 和 Omega_d，增加 vdot 状态。
         initial_rpy_deg = np.array([
             self.get_parameter('initial_roll_deg').value,
             self.get_parameter('initial_pitch_deg').value,
@@ -65,16 +66,16 @@ class DynamicsNode(Node):
 
     def update(self):
         xdot = self.v
-        vdot = self.g * self.e3 - (self.f / self.m) * (self.R @ self.e3)
+        self.vdot = self.g * self.e3 - (self.f / self.m) * (self.R @ self.e3)
         Rdot = self.R @ hat(self.Omega)
         Omegadot = self.J_inv @ (
             self.M - np.cross(self.Omega, self.J @ self.Omega)
         )
 
         self.x += xdot * self.dt
-        self.v += vdot * self.dt
+        self.v += self.vdot * self.dt
         self.R += Rdot * self.dt
-        self.R = project_to_so3(self.R)
+        self.R = project_to_so3(self.R)  # 保持 R 在 SO(3) 上。
         self.Omega += Omegadot * self.dt
 
         q = rotmat_to_quat(self.R)
@@ -84,6 +85,7 @@ class DynamicsNode(Node):
 
         msg.position.x, msg.position.y, msg.position.z = self.x
         msg.velocity.x, msg.velocity.y, msg.velocity.z = self.v
+        msg.acceleration.x, msg.acceleration.y, msg.acceleration.z = self.vdot
         msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w = q
         msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z = self.Omega
 

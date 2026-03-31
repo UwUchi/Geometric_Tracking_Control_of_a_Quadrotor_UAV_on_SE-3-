@@ -1,12 +1,81 @@
 import numpy as np
 
-from .utils import compute_Rd_and_derivatives, normalize
+from .utils import compute_Rd_and_derivatives, normalized_vec_and_derivative
 
 
-def compute_desired_force_vector(x, v, xd, vd, xdd, m, g, e3, kx, kv):
+def compute_desired_force_vector_and_derivative(
+    m,
+    g,
+    e3,
+    kx,
+    kv,
+    x,
+    v,
+    x_dd,
+    xd,
+    vd,
+    xd_dd,
+    xd_ddd=None,
+):
+    # 计算微分是为了计算 b3d_dot，进而计算 Rd_dot 和 Omega_d。
+    if xd_ddd is None:
+        xd_ddd = np.zeros(3)
     ex = x - xd
     ev = v - vd
-    return -kx * ex - kv * ev - m * g * e3 + m * xdd
+    Fd = -kx * ex - kv * ev - m * g * e3 + m * xd_dd
+
+    # Fd_dot = -kx ex_dot - kv ev_dot + m xd_dddot
+    # ex_dot = ev
+    # ev_dot = v_dot - xd_ddot
+    Fd_dot = -kx * ev - kv * (x_dd - xd_dd) + m * xd_ddd
+    return Fd, Fd_dot
+
+
+def compute_desired_attitude_and_force_from_state(
+    m,
+    g,
+    e3,
+    kx,
+    kv,
+    x,
+    v,
+    x_dd,
+    xd,
+    vd,
+    xd_dd,
+    xd_ddd,
+    b1d,
+    b1d_dot,
+    current_Rd,
+):
+    A, A_dot = compute_desired_force_vector_and_derivative(
+        m=m,
+        g=g,
+        e3=e3,
+        kx=kx,
+        kv=kv,
+        x=x,
+        v=v,
+        x_dd=x_dd,
+        xd=xd,
+        vd=vd,
+        xd_dd=xd_dd,
+        xd_ddd=xd_ddd,
+    )
+    if np.linalg.norm(A) < 1e-6:
+        b3d = np.array([0.0, 0.0, 1.0], dtype=float)
+        b3d_dot = np.zeros(3)
+    else:
+        b3d, b3d_dot, _ = normalized_vec_and_derivative(-A, -A_dot)
+
+    Rd, Rd_dot, Omega_d, Omega_dot_d = compute_Rd_and_derivatives(
+        b3d=b3d,
+        b3d_dot=b3d_dot,
+        b1d=b1d,
+        b1d_dot=b1d_dot,
+        current_Rd=current_Rd,
+    )
+    return Rd, Rd_dot, Omega_d, Omega_dot_d, A
 
 
 def compute_desired_attitude_from_state(
@@ -23,28 +92,28 @@ def compute_desired_attitude_from_state(
     e3,
     kx,
     kv,
+    x_dd=None,
+    xd_ddd=None,
 ):
-    A = compute_desired_force_vector(
-        x=x,
-        v=v,
-        xd=xd,
-        vd=vd,
-        xdd=xdd,
+    if x_dd is None:
+        x_dd = np.zeros(3)
+    if xd_ddd is None:
+        xd_ddd = np.zeros(3)
+
+    return compute_desired_attitude_and_force_from_state(
         m=m,
         g=g,
         e3=e3,
         kx=kx,
         kv=kv,
-    )
-    if np.linalg.norm(A) < 1e-6:
-        b3d = np.array([0.0, 0.0, 1.0], dtype=float)
-    else:
-        b3d = -normalize(A)
-
-    Rd, Rd_dot, Omega_d, Omega_dot_d = compute_Rd_and_derivatives(
-        b3d=b3d,
+        x=x,
+        v=v,
+        x_dd=x_dd,
+        xd=xd,
+        vd=vd,
+        xd_dd=xdd,
+        xd_ddd=xd_ddd,
         b1d=b1d,
         b1d_dot=b1d_dot,
         current_Rd=current_Rd,
     )
-    return Rd, Rd_dot, Omega_d, Omega_dot_d, A
