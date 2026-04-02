@@ -37,6 +37,7 @@ class ControllerNode(Node):
         self.b1d = np.array([1.0, 0.0, 0.0])
         self.b1d_dot = np.zeros(3)
         self.Omega_d = np.zeros(3)
+        self.Omega_d_prev = np.zeros(3)  # 用于数值差分计算 Omega_d_dot
         self.Omega_d_dot = np.zeros(3)
         self.Rd = np.eye(3)
 
@@ -84,7 +85,7 @@ class ControllerNode(Node):
         self.b1d_dot = np.array([msg.b1d_dot.x, msg.b1d_dot.y, msg.b1d_dot.z], dtype=float)
 
     def update(self):
-        Rd, _, Omega_d, Omega_dot_d, A = compute_desired_attitude_and_force_from_state(
+        Rd, _, Omega_d, Omega_d_dot, A = compute_desired_attitude_and_force_from_state(
             x=self.x,
             v=self.v,
             x_dd=self.vdot,  # 直接用 vdot 计算 Rd_dot 和 Omega_d，避免数值差分噪声。
@@ -95,6 +96,8 @@ class ControllerNode(Node):
             b1d=self.b1d,
             b1d_dot=self.b1d_dot,
             current_Rd=self.Rd,
+            Omega_d_prev=self.Omega_d_prev,
+            dt=self.dt,
             m=self.m,
             g=self.g,
             e3=self.e3,
@@ -102,6 +105,7 @@ class ControllerNode(Node):
             kv=self.kv,
         )
         self.Rd = Rd
+        self.Omega_d_prev = Omega_d
 
         e_R = 0.5 * vee(Rd.T @ self.R - self.R.T @ Rd)
         e_Omega = self.Omega - self.R.T @ Rd @ Omega_d
@@ -114,7 +118,7 @@ class ControllerNode(Node):
             + np.cross(self.Omega, self.J @ self.Omega)
             - self.J @ (
                 hat(self.Omega) @ self.R.T @ Rd @ Omega_d
-                - self.R.T @ Rd @ Omega_dot_d
+                - self.R.T @ Rd @ Omega_d_dot
             )
         )
 
@@ -132,7 +136,7 @@ class ControllerNode(Node):
                 f'xd=({self.xd[0]:.2f}, {self.xd[1]:.2f}, {self.xd[2]:.2f}), '
                 f'b1d_dot=({self.b1d_dot[0]:.2f}, {self.b1d_dot[1]:.2f}, {self.b1d_dot[2]:.2f}), '
                 f'eR=({e_R[0]:.2f}, {e_R[1]:.2f}, {e_R[2]:.2f}), '
-                f'f={f:.2f}'
+                f'Omega_d_dot=({Omega_d_dot[0]:.2f}, {Omega_d_dot[1]:.2f}, {Omega_d_dot[2]:.2f}), '
             )
 
 

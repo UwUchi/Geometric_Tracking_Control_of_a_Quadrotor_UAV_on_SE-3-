@@ -7,8 +7,8 @@ def _hover_reference(t):
     cos_yaw = np.cos(yaw)
     sin_yaw = np.sin(yaw)
     return {
-        'position': (0.5, 0.3, 5.0 * t),
-        'velocity': (0.0, 0.0, 5.0),
+        'position': (0.5*t, 0.3, 0.0),
+        'velocity': (0.5, 0.0, 0.0),
         'acceleration': (0.0, 0.0, 0.0),
         'jerk': (0.0, 0.0, 0.0),
         'b1d': (float(cos_yaw), float(sin_yaw), 0.0),

@@ -209,7 +209,7 @@ def analyze(state_data, trajectory_data):
             x_dd=state_data['acceleration'][index],
             xd=ref_position[index],
             vd=ref_velocity[index],
-            xdd=ref_acceleration[index],
+            xd_dd=ref_acceleration[index],
             xd_ddd=ref_jerk[index],
             b1d=ref_b1d[index],
             b1d_dot=ref_b1d_dot[index],

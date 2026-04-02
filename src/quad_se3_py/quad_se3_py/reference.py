@@ -47,6 +47,8 @@ def compute_desired_attitude_and_force_from_state(
     b1d,
     b1d_dot,
     current_Rd,
+    Omega_d_prev,
+    dt=0.01,
 ):
     A, A_dot = compute_desired_force_vector_and_derivative(
         m=m,
@@ -68,14 +70,16 @@ def compute_desired_attitude_and_force_from_state(
     else:
         b3d, b3d_dot, _ = normalized_vec_and_derivative(-A, -A_dot)
 
-    Rd, Rd_dot, Omega_d, Omega_dot_d = compute_Rd_and_derivatives(
+    Rd, Rd_dot, Omega_d, Omega_d_dot = compute_Rd_and_derivatives(
         b3d=b3d,
         b3d_dot=b3d_dot,
         b1d=b1d,
         b1d_dot=b1d_dot,
         current_Rd=current_Rd,
+        Omega_d_prev=Omega_d_prev,
+        dt=dt,
     )
-    return Rd, Rd_dot, Omega_d, Omega_dot_d, A
+    return Rd, Rd_dot, Omega_d, Omega_d_dot, A
 
 
 def compute_desired_attitude_from_state(
@@ -83,7 +87,7 @@ def compute_desired_attitude_from_state(
     v,
     xd,
     vd,
-    xdd,
+    xd_dd,
     b1d,
     b1d_dot,
     current_Rd,
@@ -111,9 +115,11 @@ def compute_desired_attitude_from_state(
         x_dd=x_dd,
         xd=xd,
         vd=vd,
-        xd_dd=xdd,
+        xd_dd=xd_dd,
         xd_ddd=xd_ddd,
         b1d=b1d,
         b1d_dot=b1d_dot,
         current_Rd=current_Rd,
+        Omega_d_prev=np.zeros(3),
+        dt=0.01,
     )

@@ -54,7 +54,7 @@ class VisualizationNode(Node):
 
         self.xd = np.zeros(3, dtype=float)
         self.vd = np.zeros(3, dtype=float)
-        self.xdd = np.zeros(3, dtype=float)
+        self.xd_dd = np.zeros(3, dtype=float)
         self.xd_ddd = np.zeros(3, dtype=float)
         self.b1d = np.array([1.0, 0.0, 0.0], dtype=float)
         self.b1d_dot = np.zeros(3, dtype=float)
@@ -83,7 +83,7 @@ class VisualizationNode(Node):
     def traj_cb(self, msg):
         self.xd = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
         self.vd = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
-        self.xdd = np.array(
+        self.xd_dd = np.array(
             [msg.acceleration.x, msg.acceleration.y, msg.acceleration.z],
             dtype=float,
         )
@@ -100,7 +100,7 @@ class VisualizationNode(Node):
             v=self.v,
             xd=self.xd,
             vd=self.vd,
-            xdd=self.xdd,
+            xd_dd=self.xd_dd,
             b1d=self.b1d,
             b1d_dot=self.b1d_dot,
             current_Rd=self.Rd,

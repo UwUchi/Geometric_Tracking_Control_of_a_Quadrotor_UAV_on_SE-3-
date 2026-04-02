@@ -121,8 +121,10 @@ def compute_Rd_and_derivatives(
     b3d_dot=None,
     b1d_dot=None,
     current_Rd=None,
+    Omega_d_prev=None,
+    dt=0.01,
     eps=1e-8,
-):  # 这里没用差分近似，而是直接用解析式求导，更稳，更几何。
+):  # 这里 Rd_dot 没用差分近似，而是直接用解析式求导，更稳，更几何。
     """
     Compute the desired attitude matrix and related derivatives.
 
@@ -132,8 +134,11 @@ def compute_Rd_and_derivatives(
         b3d_dot  : b3d 的导数，可为 None
         b1d_dot  : b1d 的导数，可为 None
         current_Rd : 当 b3d 与 b1d 近乎平行时的回退参考
+        Omega_d_prev : 上一时刻的 Omega_d, 用于数值差分计算 Omega_d_dot
+        dt       : 时间步长，用于数值差分计算 Omega_d_dot
+        eps      : 小阈值，防止除零
     输出:
-        Rd, Rd_dot, Omega_d, Omega_dot_d
+        Rd, Rd_dot, Omega_d, Omega_d_dot
     """
     # ---------- 1) 归一化输入 ----------
     b3d, n3 = normalize_with_norm(b3d, eps)
@@ -154,6 +159,8 @@ def compute_Rd_and_derivatives(
         b3d_dot = np.zeros(3)
     if b1d_dot is None:
         b1d_dot = np.zeros(3)
+    if Omega_d_prev is None:
+        Omega_d_prev = np.zeros(3)
 
     # ---------- 2) 构造 b2d ----------
     # c = b3d x b1c
@@ -201,8 +208,8 @@ def compute_Rd_and_derivatives(
     Omega_hat_d = 0.5 * (Omega_hat_d - Omega_hat_d.T)  # 数值对称化
     Omega_d = vee(Omega_hat_d)
 
-    # ---------- 6) 先给简化版 Omega_dot_d ----------
-    # 论文控制律里会用到 Omega_d_dot，但当前复现阶段先置零通常能跑通框架。
-    Omega_dot_d = np.zeros(3)
+    # ---------- 6) 求 Omega_d_dot ----------
+    # 在Omega_d 解析求解的情况下，Omega_d_dot 用差分求就够了，解析式很复杂
+    Omega_d_dot = (Omega_d - Omega_d_prev)/dt
 
-    return Rd, Rd_dot, Omega_d, Omega_dot_d
+    return Rd, Rd_dot, Omega_d, Omega_d_dot
