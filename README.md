@@ -47,6 +47,7 @@ ros2_p_ws/
     └── quad_se3_py/
         ├── launch/
         │   ├── sim.launch.py
+        │   ├── playback_viz.launch.py
         │   └── sim_viz.launch.py
         ├── quad_se3_py/
         │   ├── controller_node.py
@@ -57,6 +58,7 @@ ros2_p_ws/
         │   ├── utils.py
         │   └── visualization_node.py
         ├── rviz/
+        │   ├── quad_recording.rviz
         │   └── quad_se3.rviz
         └── test/
 ```
@@ -137,9 +139,17 @@ ros2 launch quad_se3_py sim_viz.launch.py
 ```bash
 ros2 launch quad_se3_py sim_viz.launch.py \
   use_rviz:=true \
+  use_sim_time:=false \
   trajectory_mode:=paper_case_1_helix \
   path_max_points:=2000 \
   show_error_markers:=true
+```
+
+也支持显式指定 RViz 配置：
+
+```bash
+ros2 launch quad_se3_py sim_viz.launch.py \
+  rviz_config:=/home/sachan/ros2_p_ws/install/quad_se3_py/share/quad_se3_py/rviz/quad_recording.rviz
 ```
 
 支持的初始姿态参数：
@@ -176,6 +186,7 @@ cd /home/sachan/ros2_p_ws
 ```
 
 - 脚本会先启动 rosbag recorder，再启动仿真，尽量避免漏掉开头数据
+- 默认使用更干净的录制视图：关闭 TF，隐藏位置误差箭头
 - 停止后会自动分析最新 bag
 - 分析结果默认写到带时间戳的目录，不会覆盖上一次结果
 
@@ -183,6 +194,12 @@ cd /home/sachan/ros2_p_ws
 
 ```bash
 USE_RVIZ=false ./scripts/run_case1.sh
+```
+
+如果想显示位置误差箭头：
+
+```bash
+SHOW_ERROR_MARKERS=true ./scripts/run_case1.sh
 ```
 
 ### Case II: 接近倒置姿态恢复
@@ -193,6 +210,7 @@ cd /home/sachan/ros2_p_ws
 ```
 
 - 脚本同样会先启动 recorder，再启动仿真
+- 默认也使用录制友好的 RViz 视图
 - 停止后自动分析最新 bag
 - 分析结果默认按 bag 目录名输出
 
@@ -209,6 +227,35 @@ yaw = 0 deg
 ```bash
 INITIAL_ROLL_DEG=175 USE_RVIZ=false ./scripts/run_case2.sh
 ```
+
+## Video Recording Workflow
+
+推荐用于论文风格录屏：
+
+```bash
+cd /home/sachan/ros2_p_ws
+source install/setup.bash
+./scripts/run_case1.sh
+```
+
+录制建议：
+
+- 启动后把 RViz 窗口最大化
+- 保持 `quad_recording.rviz` 的单一主镜头，不要边录边转动视角
+- 如果画面还想更干净，继续保持 `TF` 关闭
+- 如果想强调跟踪误差，再临时打开 `SHOW_ERROR_MARKERS=true`
+
+当前默认录制配置：
+
+- 保留 `Actual Path`
+- 保留 `Desired Path`
+- 保留实际/期望姿态轴 Marker
+- 默认关闭 `TF`
+- 默认关闭位置误差箭头
+
+录制视图文件位于：
+
+[`src/quad_se3_py/rviz/quad_recording.rviz`](/home/sachan/ros2_p_ws/src/quad_se3_py/rviz/quad_recording.rviz)
 
 ## rosbag Recording
 
@@ -280,6 +327,34 @@ plots/case1_helix_20260328_204828/
 - `trajectory_3d.png`
 - `errors.png`
 - `summary.json`
+
+## Slow Playback
+
+如果实时录制还是太快，可以回放最近一个 bag 并慢速录屏：
+
+```bash
+cd /home/sachan/ros2_p_ws
+./scripts/replay_bag_slow.sh
+```
+
+默认行为：
+
+- 自动选择 `bags/` 下最新的一个 bag
+- 启动仅用于回放的可视化 launch
+- 使用 `/clock` 驱动 RViz 和 visualization 节点
+- 默认以 `0.5x` 速度播放
+
+也可以指定 bag 和倍率：
+
+```bash
+PLAY_RATE=0.4 ./scripts/replay_bag_slow.sh bags/case1_helix_20260328_204828
+```
+
+如果想在慢放时保留误差箭头：
+
+```bash
+PLAY_RATE=0.6 SHOW_ERROR_MARKERS=true ./scripts/replay_bag_slow.sh
+```
 
 ## What the Analysis Computes
 
@@ -377,6 +452,8 @@ RViz 里当前可能同时显示：
 - Marker 里的期望姿态轴
 
 如果想让画面更干净，可以在 RViz 的 `Markers` 或 `TF` 显示里手动关掉一部分。
+
+录制场景下，项目现在默认使用 `quad_recording.rviz`，已经把 `TF` 关闭，优先保留路径和姿态轴。
 
 ## Development Notes
 

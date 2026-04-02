@@ -1,0 +1,126 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.25
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 180; 180; 184
+      Enabled: true
+      Name: Grid
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: world
+      Value: true
+    - Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 255; 140; 64
+      Enabled: true
+      Head Diameter: 0.1
+      Head Length: 0.1
+      Length: 0.1
+      Line Style: Lines
+      Line Width: 0.07
+      Name: Actual Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 140; 64
+      Pose Style: None
+      Radius: 0.03
+      Shaft Diameter: 0.03
+      Shaft Length: 0.05
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /viz/actual_path
+      Value: true
+    - Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 64; 190; 255
+      Enabled: true
+      Head Diameter: 0.1
+      Head Length: 0.1
+      Length: 0.1
+      Line Style: Lines
+      Line Width: 0.07
+      Name: Desired Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 64; 190; 255
+      Pose Style: None
+      Radius: 0.03
+      Shaft Diameter: 0.03
+      Shaft Length: 0.05
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /viz/desired_path
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Markers
+      Namespaces:
+        actual_axes: true
+        desired_axes: true
+        position_error: false
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /viz/markers
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: false
+      Frame Timeout: 15
+      Marker Scale: 0.45
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Tree:
+        {}
+      Update Interval: 0
+      Value: false
+  Enabled: true
+  Global Options:
+    Background Color: 246; 246; 240
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 10
+      Focal Point:
+        X: 1.1
+        Y: -0.2
+        Z: 1.8
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.78
+      Target Frame: quad_actual
+      Value: Orbit (rviz)
+      Yaw: 0.62

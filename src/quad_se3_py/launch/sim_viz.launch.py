@@ -11,9 +11,11 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_rviz', default_value='true'),
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('trajectory_mode', default_value='hover'),
         DeclareLaunchArgument('path_max_points', default_value='2000'),
         DeclareLaunchArgument('show_error_markers', default_value='true'),
+        DeclareLaunchArgument('rviz_config', default_value=rviz_config),
         DeclareLaunchArgument('initial_roll_deg', default_value='0.0'),
         DeclareLaunchArgument('initial_pitch_deg', default_value='0.0'),
         DeclareLaunchArgument('initial_yaw_deg', default_value='0.0'),
@@ -23,12 +25,16 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'trajectory_mode': LaunchConfiguration('trajectory_mode'),
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
             }],
         ),
         Node(
             package='quad_se3_py',
             executable='controller_node',
             output='screen',
+            parameters=[{
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
+            }],
         ),
         Node(
             package='quad_se3_py',
@@ -38,6 +44,7 @@ def generate_launch_description():
                 'initial_roll_deg': LaunchConfiguration('initial_roll_deg'),
                 'initial_pitch_deg': LaunchConfiguration('initial_pitch_deg'),
                 'initial_yaw_deg': LaunchConfiguration('initial_yaw_deg'),
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
             }],
         ),
         Node(
@@ -47,6 +54,7 @@ def generate_launch_description():
             parameters=[{
                 'path_max_points': LaunchConfiguration('path_max_points'),
                 'show_error_markers': LaunchConfiguration('show_error_markers'),
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
             }],
         ),
         Node(
@@ -54,7 +62,10 @@ def generate_launch_description():
             executable='rviz2',
             name='rviz2',
             output='screen',
-            arguments=['-d', rviz_config],
+            arguments=['-d', LaunchConfiguration('rviz_config')],
+            parameters=[{
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
+            }],
             condition=IfCondition(LaunchConfiguration('use_rviz')),
         ),
     ])

@@ -21,6 +21,9 @@ set -euo pipefail
 
 trajectory_mode="${1:-paper_case_2_recovery_reference}"
 use_rviz="${USE_RVIZ:-true}"
+show_error_markers="${SHOW_ERROR_MARKERS:-false}"
+path_max_points="${PATH_MAX_POINTS:-2000}"
+rviz_config="${RVIZ_CONFIG:-$(cd "${workspace_dir}" && pwd)/install/quad_se3_py/share/quad_se3_py/rviz/quad_recording.rviz}"
 case_name="case2_upside_down"
 initial_roll_deg="${INITIAL_ROLL_DEG:-178.0}"
 initial_pitch_deg="${INITIAL_PITCH_DEG:-0.0}"
@@ -53,6 +56,9 @@ ROS_LOG_DIR="${workspace_dir}/log/ros2" \
   ros2 launch quad_se3_py sim_viz.launch.py \
   use_rviz:="${use_rviz}" \
   trajectory_mode:="${trajectory_mode}" \
+  show_error_markers:="${show_error_markers}" \
+  path_max_points:="${path_max_points}" \
+  rviz_config:="${rviz_config}" \
   initial_roll_deg:="${initial_roll_deg}" \
   initial_pitch_deg:="${initial_pitch_deg}" \
   initial_yaw_deg:="${initial_yaw_deg}" &
