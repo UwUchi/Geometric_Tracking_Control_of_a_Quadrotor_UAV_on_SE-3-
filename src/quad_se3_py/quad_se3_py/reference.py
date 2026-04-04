@@ -98,11 +98,15 @@ def compute_desired_attitude_from_state(
     kv,
     x_dd=None,
     xd_ddd=None,
+    Omega_d_prev=None,
+    dt=0.01,
 ):
     if x_dd is None:
         x_dd = np.zeros(3)
     if xd_ddd is None:
         xd_ddd = np.zeros(3)
+    if Omega_d_prev is None:
+        Omega_d_prev = np.zeros(3)
 
     return compute_desired_attitude_and_force_from_state(
         m=m,
@@ -120,6 +124,6 @@ def compute_desired_attitude_from_state(
         b1d=b1d,
         b1d_dot=b1d_dot,
         current_Rd=current_Rd,
-        Omega_d_prev=np.zeros(3),
-        dt=0.01,
+        Omega_d_prev=Omega_d_prev,
+        dt=dt,
     )

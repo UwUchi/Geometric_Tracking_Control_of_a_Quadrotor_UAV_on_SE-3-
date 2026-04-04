@@ -123,7 +123,8 @@ class ControllerNode(Node):
         )
 
         msg = ControlInput()
-        msg.thrust = float(max(0.0, f))
+        #msg.thrust = float(max(0.0, f))
+        msg.thrust = float(f)  # 直接使用 f，允许负值以测试控制器的行为。
         msg.moment.x = float(M[0])
         msg.moment.y = float(M[1])
         msg.moment.z = float(M[2])
