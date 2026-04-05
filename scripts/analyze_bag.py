@@ -50,6 +50,8 @@ os.environ['LD_LIBRARY_PATH'] = (
 )
 
 from quad_se3_py.reference import compute_desired_attitude_from_state
+from quad_se3_py.timing import trajectory_time_from_stamp
+from quad_se3_py.trajectories import evaluate_trajectory
 from quad_se3_py.utils import quat_to_rotmat, vee
 
 
@@ -57,6 +59,7 @@ TOPICS = {
     '/quad_state': 'quad_se3_msgs/msg/QuadState',
     '/trajectory': 'quad_se3_msgs/msg/TrajectoryPoint',
     '/control_input': 'quad_se3_msgs/msg/ControlInput',
+    '/trajectory_epoch': 'builtin_interfaces/msg/Time',
 }
 
 
@@ -87,6 +90,22 @@ def parse_args():
         default=8.004e-4,
         help='Yaw moment coefficient c_tau_f used to recover rotor thrusts.',
     )
+    parser.add_argument(
+        '--trajectory-mode',
+        choices=['hover', 'paper_case_1_helix', 'paper_case_2_recovery_reference'],
+        help='Trajectory mode for time-based reference reconstruction.',
+    )
+    parser.add_argument(
+        '--trajectory-start-time-sec',
+        type=float,
+        help='Shared trajectory start time in ROS seconds. Defaults to the first /trajectory stamp.',
+    )
+    parser.add_argument(
+        '--reference-source',
+        choices=['auto', 'time_function', 'trajectory_topic'],
+        default='auto',
+        help='Reference reconstruction source. Defaults to auto-detecting bag metadata, otherwise falling back to /trajectory.',
+    )
     return parser.parse_args()
 
 
@@ -105,6 +124,14 @@ def resolve_bag_path(bag_path_arg):
     return max(bag_dirs, key=lambda path: path.stat().st_mtime).resolve()
 
 
+def read_experiment_metadata(bag_path):
+    metadata_path = Path(bag_path) / 'experiment_metadata.json'
+    if not metadata_path.is_file():
+        return {}
+    with open(metadata_path, 'r', encoding='utf-8') as file:
+        return json.load(file)
+
+
 def read_bag_messages(bag_path):
     reader = rosbag2_py.SequentialReader()
     storage_options = rosbag2_py.StorageOptions(uri=bag_path, storage_id='sqlite3')
@@ -112,11 +139,16 @@ def read_bag_messages(bag_path):
     reader.open(storage_options, converter_options)
 
     topic_types = {topic.name: topic.type for topic in reader.get_all_topics_and_types()}
-    missing = sorted(set(TOPICS) - set(topic_types))
+    required_topics = {'/quad_state', '/trajectory', '/control_input'}
+    missing = sorted(required_topics - set(topic_types))
     if missing:
         raise RuntimeError(f'Missing required topics in bag: {missing}')
 
-    type_cache = {topic: get_message(topic_types[topic]) for topic in TOPICS}
+    type_cache = {
+        topic: get_message(topic_types[topic])
+        for topic in topic_types
+        if topic in TOPICS
+    }
     bag_data = {topic: [] for topic in TOPICS}
 
     while reader.has_next():
@@ -142,9 +174,11 @@ def vector3_to_array(msg):
 
 
 def sample_state(messages):
-    times, positions, velocities, accelerations, rotations, omegas = [], [], [], [], [], []
+    times, stamps, positions, velocities, accelerations, rotations, omegas = [], [], [], [], [], [], []
     for timestamp_ns, msg in messages:
-        times.append(stamp_to_sec(msg.stamp, timestamp_ns))
+        stamp_sec = stamp_to_sec(msg.stamp, timestamp_ns)
+        times.append(stamp_sec)
+        stamps.append(msg.stamp)
         positions.append(vector3_to_array(msg.position))
         velocities.append(vector3_to_array(msg.velocity))
         accelerations.append(vector3_to_array(msg.acceleration))
@@ -161,6 +195,7 @@ def sample_state(messages):
         omegas.append(vector3_to_array(msg.angular_velocity))
     return {
         'time': np.array(times, dtype=float),
+        'stamp': stamps,
         'position': np.array(positions, dtype=float),
         'velocity': np.array(velocities, dtype=float),
         'acceleration': np.array(accelerations, dtype=float),
@@ -206,6 +241,39 @@ def sample_control(messages):
     }
 
 
+def sample_epoch(messages):
+    if not messages:
+        return None
+    _, msg = messages[0]
+    return float(msg.sec) + float(msg.nanosec) * 1e-9
+
+
+def infer_trajectory_mode(bag_path, case_name_override):
+    name = (case_name_override or bag_path.name).lower()
+    if 'case1' in name or 'helix' in name:
+        return 'paper_case_1_helix'
+    if 'case2' in name or 'recovery' in name or 'upside_down' in name:
+        return 'paper_case_2_recovery_reference'
+    return 'hover'
+
+
+def resolve_reference_source(reference_source_arg, experiment_metadata, epoch_time_sec):
+    if reference_source_arg != 'auto':
+        return reference_source_arg
+    if epoch_time_sec is not None:
+        return 'time_function'
+    if (
+        experiment_metadata.get('trajectory_mode') is not None
+        and experiment_metadata.get('trajectory_epoch_source') in (
+            'first_quad_state_stamp',
+            'trajectory_epoch_topic',
+        )
+        and experiment_metadata.get('trajectory_start_time_sec') is not None
+    ):
+        return 'time_function'
+    return 'trajectory_topic'
+
+
 def interp_vectors(source_times, source_values, target_times):
     if len(source_times) == 0:
         raise RuntimeError('Cannot interpolate empty source data.')
@@ -217,26 +285,74 @@ def interp_vectors(source_times, source_values, target_times):
     ])
 
 
-def analyze(state_data, trajectory_data):
+def reconstruct_reference_from_time_function(
+    state_data,
+    trajectory_mode,
+    trajectory_start_time_sec,
+):
+    ref_position = []
+    ref_velocity = []
+    ref_acceleration = []
+    ref_jerk = []
+    ref_b1d = []
+    ref_b1d_dot = []
+    trajectory_time = []
+
+    for stamp in state_data['stamp']:
+        t = trajectory_time_from_stamp(stamp, trajectory_start_time_sec)
+        sample = evaluate_trajectory(trajectory_mode, t)
+        trajectory_time.append(t)
+        ref_position.append(sample['position'])
+        ref_velocity.append(sample['velocity'])
+        ref_acceleration.append(sample['acceleration'])
+        ref_jerk.append(sample['jerk'])
+        ref_b1d.append(sample['b1d'])
+        ref_b1d_dot.append(sample['b1d_dot'])
+
+    return {
+        'trajectory_time': np.array(trajectory_time, dtype=float),
+        'position': np.array(ref_position, dtype=float),
+        'velocity': np.array(ref_velocity, dtype=float),
+        'acceleration': np.array(ref_acceleration, dtype=float),
+        'jerk': np.array(ref_jerk, dtype=float),
+        'b1d': np.array(ref_b1d, dtype=float),
+        'b1d_dot': np.array(ref_b1d_dot, dtype=float),
+    }
+
+
+def reconstruct_reference_from_topic(state_data, trajectory_data):
     target_times = state_data['time']
-    ref_position = interp_vectors(
-        trajectory_data['time'], trajectory_data['position'], target_times
-    )
-    ref_velocity = interp_vectors(
-        trajectory_data['time'], trajectory_data['velocity'], target_times
-    )
-    ref_acceleration = interp_vectors(
-        trajectory_data['time'], trajectory_data['acceleration'], target_times
-    )
-    ref_jerk = interp_vectors(
-        trajectory_data['time'], trajectory_data['jerk'], target_times
-    )
-    ref_b1d = interp_vectors(
-        trajectory_data['time'], trajectory_data['b1d'], target_times
-    )
-    ref_b1d_dot = interp_vectors(
-        trajectory_data['time'], trajectory_data['b1d_dot'], target_times
-    )
+    return {
+        'trajectory_time': target_times - target_times[0],
+        'position': interp_vectors(
+            trajectory_data['time'], trajectory_data['position'], target_times
+        ),
+        'velocity': interp_vectors(
+            trajectory_data['time'], trajectory_data['velocity'], target_times
+        ),
+        'acceleration': interp_vectors(
+            trajectory_data['time'], trajectory_data['acceleration'], target_times
+        ),
+        'jerk': interp_vectors(
+            trajectory_data['time'], trajectory_data['jerk'], target_times
+        ),
+        'b1d': interp_vectors(
+            trajectory_data['time'], trajectory_data['b1d'], target_times
+        ),
+        'b1d_dot': interp_vectors(
+            trajectory_data['time'], trajectory_data['b1d_dot'], target_times
+        ),
+    }
+
+
+def analyze(state_data, reference_data):
+    target_times = state_data['time']
+    ref_position = reference_data['position']
+    ref_velocity = reference_data['velocity']
+    ref_acceleration = reference_data['acceleration']
+    ref_jerk = reference_data['jerk']
+    ref_b1d = reference_data['b1d']
+    ref_b1d_dot = reference_data['b1d_dot']
 
     psi_values = []
     e_x_values = []
@@ -260,11 +376,11 @@ def analyze(state_data, trajectory_data):
             b1d=ref_b1d[index],
             b1d_dot=ref_b1d_dot[index],
             current_Rd=current_Rd,
-            m=1.0,
+            m=4.34,
             g=9.81,
             e3=e3,
-            kx=8.0,
-            kv=5.0,
+            kx=16*4.34,
+            kv=5.6*4.34,
             Omega_d_prev=current_Omega_d,
         )
         current_Rd = Rd
@@ -286,7 +402,9 @@ def analyze(state_data, trajectory_data):
 
     return {
         'time': target_times,
+        'reference_time': reference_data['trajectory_time'],
         'reference_position': ref_position,
+        'reference_velocity': ref_velocity,
         'desired_omega': np.array(desired_omega_values, dtype=float),
         'e_x': np.array(e_x_values, dtype=float),
         'e_v': np.array(e_v_values, dtype=float),
@@ -364,7 +482,7 @@ def plot_trajectory(output_dir, state_data, analysis_data):
     ax.set_zlabel('z [m]', labelpad=10)
     ax.legend()
     ax.grid(True)
-    ax.view_init(elev=20, azim=-45)
+    ax.view_init(elev=20, azim=-37)
     ax.set_box_aspect((
         np.ptp(state_data['position'][:, 0]) + 1e-6,
         np.ptp(state_data['position'][:, 1]) + 1e-6,
@@ -474,14 +592,10 @@ def plot_errors(output_dir, state_data, control_data, analysis_data, arm_length,
 
 """额外的调试图，显示位置误差在切向方向上的分量, 
 可以帮助分析误差是控制器的问题还是rviz2可视化的时间没对齐。"""
-def plot_debug(output_dir, state_data, trajectory_data):
+def plot_debug(output_dir, state_data, analysis_data):
     target_times = state_data['time']
-    ref_position = interp_vectors(
-        trajectory_data['time'], trajectory_data['position'], target_times
-    )
-    ref_velocity = interp_vectors(
-        trajectory_data['time'], trajectory_data['velocity'], target_times
-    )
+    ref_position = analysis_data['reference_position']
+    ref_velocity = analysis_data['reference_velocity']
     fig = plt.figure(figsize=(12, 10))
     ax = fig.add_subplot(111)
 
@@ -525,6 +639,9 @@ def write_summary(output_dir, state_data, analysis_data):
         'final_attitude_error_function': float(analysis_data['psi'][-1]),
         'max_omega_error_norm': float(np.max(np.linalg.norm(analysis_data['e_Omega'], axis=1))),
         'final_omega_error_norm': float(np.linalg.norm(analysis_data['e_Omega'][-1])),
+        'reference_source': analysis_data.get('reference_source'),
+        'trajectory_mode': analysis_data.get('trajectory_mode'),
+        'trajectory_start_time_sec': analysis_data.get('trajectory_start_time_sec'),
     }
     with open(output_dir / 'summary.json', 'w', encoding='utf-8') as file:
         json.dump(summary, file, indent=2)
@@ -541,12 +658,56 @@ def main():
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    experiment_metadata = read_experiment_metadata(bag_path)
     bag_data = read_bag_messages(str(bag_path))
     state_data = sample_state(bag_data['/quad_state'])
     trajectory_data = sample_trajectory(bag_data['/trajectory'])
     control_data = sample_control(bag_data['/control_input'])
+    epoch_time_sec = sample_epoch(bag_data['/trajectory_epoch'])
 
-    analysis_data = analyze(state_data, trajectory_data)
+    reference_source = resolve_reference_source(
+        args.reference_source,
+        experiment_metadata,
+        epoch_time_sec,
+    )
+    trajectory_mode = (
+        args.trajectory_mode
+        or experiment_metadata.get('trajectory_mode')
+        or infer_trajectory_mode(bag_path, args.case_name)
+    )
+    if reference_source == 'time_function':
+        trajectory_start_time_sec = (
+            args.trajectory_start_time_sec
+            if args.trajectory_start_time_sec is not None
+            else (
+                experiment_metadata.get('trajectory_start_time_sec')
+                if experiment_metadata.get('trajectory_start_time_sec') is not None
+                else epoch_time_sec
+            )
+        )
+        if trajectory_start_time_sec is None:
+            trajectory_start_time_sec = trajectory_data['time'][0]
+            print(
+                'Warning: time_function reference without recorded '
+                'trajectory_start_time_sec uses the first /trajectory stamp as '
+                'an approximation and may introduce a constant phase offset.'
+            )
+        reference_data = reconstruct_reference_from_time_function(
+            state_data,
+            trajectory_mode,
+            trajectory_start_time_sec,
+        )
+    else:
+        reference_data = reconstruct_reference_from_topic(state_data, trajectory_data)
+
+    analysis_data = analyze(state_data, reference_data)
+    analysis_data['reference_source'] = reference_source
+    analysis_data['trajectory_mode'] = trajectory_mode
+    analysis_data['trajectory_start_time_sec'] = (
+        trajectory_start_time_sec
+        if reference_source == 'time_function'
+        else experiment_metadata.get('trajectory_start_time_sec')
+    )
     font_path = "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf"
     font_manager.fontManager.addfont(font_path)
     font_name = font_manager.FontProperties(fname=font_path).get_name()
@@ -564,7 +725,7 @@ def main():
         args.arm_length,
         args.yaw_moment_coeff,
     )
-    plot_debug(output_dir, state_data, trajectory_data)
+    plot_debug(output_dir, state_data, analysis_data)
     write_summary(output_dir, state_data, analysis_data)
 
     print(f'Wrote plots and summary to {output_dir}')

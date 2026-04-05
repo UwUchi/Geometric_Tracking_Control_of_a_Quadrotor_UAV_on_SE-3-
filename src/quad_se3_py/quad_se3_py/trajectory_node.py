@@ -1,8 +1,10 @@
 import rclpy
+from builtin_interfaces.msg import Time
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 
 from quad_se3_msgs.msg import TrajectoryPoint
-from .timing import resolve_trajectory_start_time, trajectory_time_from_stamp
+from .timing import stamp_to_seconds, trajectory_time_from_stamp
 from .trajectories import evaluate_trajectory
 
 
@@ -10,6 +12,12 @@ class TrajectoryNode(Node):
     def __init__(self):
         super().__init__('trajectory_node')
         self.pub = self.create_publisher(TrajectoryPoint, '/trajectory', 10)
+        self.epoch_sub = self.create_subscription(
+            Time,
+            '/trajectory_epoch',
+            self.epoch_cb,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL),
+        )
         self.declare_parameter('trajectory_mode', 'hover')
         self.declare_parameter('trajectory_start_time_sec', 0.0)
         self.declare_parameter('reference_time_offset_sec', 0.0)
@@ -22,21 +30,16 @@ class TrajectoryNode(Node):
         self.reference_time_offset_sec = float(
             self.get_parameter('reference_time_offset_sec').value
         )
-        self._start_time_initialized = self.trajectory_start_time_sec > 0.0
+        self.have_epoch = self.trajectory_start_time_sec > 0.0
+
+    def epoch_cb(self, msg):
+        self.trajectory_start_time_sec = stamp_to_seconds(msg)
+        self.have_epoch = True
 
     def update(self):
+        if not self.have_epoch:
+            return
         now = self.get_clock().now()
-        if not self._start_time_initialized:
-            self.trajectory_start_time_sec = resolve_trajectory_start_time(
-                self.trajectory_start_time_sec,
-                now.nanoseconds * 1e-9,
-            )
-            self._start_time_initialized = True
-            self.get_logger().warn(
-                'trajectory_start_time_sec was not provided; '
-                'falling back to the first trajectory sample time.'
-            )
-
         t = trajectory_time_from_stamp(
             now.to_msg(),
             self.trajectory_start_time_sec,

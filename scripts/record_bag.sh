@@ -22,7 +22,7 @@ set -euo pipefail
 
 case_name="${1:-case1_helix}"
 timestamp="$(date +%Y%m%d_%H%M%S)"
-output_dir="${workspace_dir}/bags/${case_name}_${timestamp}"
+output_dir="${2:-${workspace_dir}/bags/${case_name}_${timestamp}}"
 export ROS_LOG_DIR="${workspace_dir}/log/ros2"
 
 mkdir -p "${workspace_dir}/bags"
@@ -31,5 +31,6 @@ mkdir -p "${ROS_LOG_DIR}"
 exec ros2 bag record \
   --output "${output_dir}" \
   /quad_state \
+  /trajectory_epoch \
   /trajectory \
   /control_input

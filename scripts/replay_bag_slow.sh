@@ -37,6 +37,49 @@ if [ -z "${bag_path}" ]; then
   bag_path="${latest_bag}"
 fi
 
+metadata_env="$(
+  python3 - "${bag_path}" <<'PY'
+import json
+import shlex
+import sys
+from pathlib import Path
+
+bag_path = Path(sys.argv[1])
+metadata_path = bag_path / 'experiment_metadata.json'
+
+trajectory_mode = None
+trajectory_start_time_sec = None
+reference_time_offset_sec = 0.0
+
+if metadata_path.is_file():
+    metadata = json.loads(metadata_path.read_text())
+    trajectory_mode = metadata.get('trajectory_mode')
+    if metadata.get('trajectory_epoch_source') in (
+        'first_quad_state_stamp',
+        'trajectory_epoch_topic',
+    ):
+        trajectory_start_time_sec = metadata.get('trajectory_start_time_sec')
+    reference_time_offset_sec = metadata.get('reference_time_offset_sec', 0.0)
+
+if trajectory_mode is None:
+    bag_name = bag_path.name.lower()
+    if 'case1' in bag_name or 'helix' in bag_name:
+        trajectory_mode = 'paper_case_1_helix'
+    elif 'case2' in bag_name or 'recovery' in bag_name or 'upside_down' in bag_name:
+        trajectory_mode = 'paper_case_2_recovery_reference'
+    else:
+        trajectory_mode = 'hover'
+
+if trajectory_start_time_sec is None:
+    trajectory_start_time_sec = 0.0
+
+print(f"trajectory_mode={shlex.quote(str(trajectory_mode))}")
+print(f"trajectory_start_time_sec={shlex.quote(str(trajectory_start_time_sec))}")
+print(f"reference_time_offset_sec={shlex.quote(str(reference_time_offset_sec))}")
+PY
+)"
+eval "${metadata_env}"
+
 cleanup() {
   if [ -n "${play_pid}" ] && kill -0 "${play_pid}" 2>/dev/null; then
     kill -INT "${play_pid}" 2>/dev/null || true
@@ -55,6 +98,9 @@ ROS_LOG_DIR="${workspace_dir}/log/ros2" \
   ros2 launch quad_se3_py playback_viz.launch.py \
   use_rviz:="${use_rviz}" \
   use_sim_time:=true \
+  trajectory_mode:="${trajectory_mode}" \
+  trajectory_start_time_sec:="${trajectory_start_time_sec}" \
+  reference_time_offset_sec:="${reference_time_offset_sec}" \
   show_error_markers:="${show_error_markers}" \
   path_max_points:="${path_max_points}" \
   rviz_config:="${rviz_config}" &

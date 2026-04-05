@@ -1,11 +1,12 @@
 import rclpy
+from builtin_interfaces.msg import Time
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 import numpy as np
 
 from quad_se3_msgs.msg import QuadState, ControlInput
 from .reference import compute_desired_attitude_and_force_from_state
 from .timing import (
-    resolve_trajectory_start_time,
     stamp_to_seconds,
     trajectory_time_from_stamp,
 )
@@ -20,14 +21,20 @@ class ControllerNode(Node):
         self.sub_state = self.create_subscription(
             QuadState, '/quad_state', self.state_cb, 10
         )
+        self.sub_epoch = self.create_subscription(
+            Time,
+            '/trajectory_epoch',
+            self.epoch_cb,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL),
+        )
         self.pub = self.create_publisher(ControlInput, '/control_input', 10)
         self.declare_parameter('trajectory_mode', 'hover')
         self.declare_parameter('trajectory_start_time_sec', 0.0)
         self.declare_parameter('reference_time_offset_sec', 0.0)
 
-        self.m = 1.0
+        self.m = 4.34
         self.g = 9.81
-        self.J = np.diag([0.02, 0.02, 0.04])
+        self.J = np.diag([0.0820, 0.0845, 0.1377])
         self.e3 = np.array([0.0, 0.0, 1.0])
         self.trajectory_mode = self.get_parameter('trajectory_mode').value
         self.trajectory_start_time_sec = float(
@@ -36,6 +43,7 @@ class ControllerNode(Node):
         self.reference_time_offset_sec = float(
             self.get_parameter('reference_time_offset_sec').value
         )
+        self.have_epoch = self.trajectory_start_time_sec > 0.0
 
         self.x = np.zeros(3)
         self.v = np.zeros(3)
@@ -57,14 +65,18 @@ class ControllerNode(Node):
         self.Omega_d_dot = np.zeros(3)
         self.Rd = np.eye(3)
 
-        self.kx = 8.0
-        self.kv = 5.0
-        self.kR = 4.0
-        self.kOmega = 0.8
+        self.kx = 16.0 * self.m
+        self.kv = 5.6 * self.m
+        self.kR = 8.81
+        self.kOmega = 2.54
 
         self.dt = 0.01
         self.timer = self.create_timer(self.dt, self.update)
         self.log_counter = 0
+
+    def epoch_cb(self, msg):
+        self.trajectory_start_time_sec = stamp_to_seconds(msg)
+        self.have_epoch = True
 
     def state_cb(self, msg):
         self.x = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
@@ -91,15 +103,6 @@ class ControllerNode(Node):
     def _update_reference_from_state_stamp(self):
         if self.state_stamp is None:
             return
-        if self.trajectory_start_time_sec <= 0.0:
-            self.trajectory_start_time_sec = resolve_trajectory_start_time(
-                self.trajectory_start_time_sec,
-                stamp_to_seconds(self.state_stamp),
-            )
-            self.get_logger().warn(
-                'trajectory_start_time_sec was not provided; '
-                'falling back to the first state stamp.'
-            )
 
         t = trajectory_time_from_stamp(
             self.state_stamp,
@@ -118,6 +121,11 @@ class ControllerNode(Node):
         if not self.have_state:
             if self.log_counter % 100 == 0:
                 self.get_logger().warn('Waiting for the first /quad_state sample.')
+            self.log_counter += 1
+            return
+        if not self.have_epoch:
+            if self.log_counter % 100 == 0:
+                self.get_logger().warn('Waiting for /trajectory_epoch before computing reference.')
             self.log_counter += 1
             return
 

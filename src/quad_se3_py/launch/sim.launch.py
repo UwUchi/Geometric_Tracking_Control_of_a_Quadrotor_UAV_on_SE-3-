@@ -1,5 +1,3 @@
-import time
-
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
@@ -7,14 +5,12 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    default_trajectory_start_time = f'{time.time():.9f}'
-
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('trajectory_mode', default_value='hover'),
         DeclareLaunchArgument(
             'trajectory_start_time_sec',
-            default_value=default_trajectory_start_time,
+            default_value='0.0',
         ),
         DeclareLaunchArgument('reference_time_offset_sec', default_value='0.0'),
         DeclareLaunchArgument('initial_roll_deg', default_value='0.0'),

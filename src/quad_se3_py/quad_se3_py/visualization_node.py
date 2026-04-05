@@ -2,17 +2,18 @@ from collections import deque
 
 import numpy as np
 import rclpy
+from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Point, PoseStamped, TransformStamped
 from nav_msgs.msg import Path
 from quad_se3_msgs.msg import QuadState
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_msgs.msg import ColorRGBA
 from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
 
 from .reference import compute_desired_attitude_from_state
 from .timing import (
-    resolve_trajectory_start_time,
     stamp_to_seconds,
     trajectory_time_from_stamp,
 )
@@ -39,9 +40,16 @@ class VisualizationNode(Node):
         self.reference_time_offset_sec = float(
             self.get_parameter('reference_time_offset_sec').value
         )
+        self.have_epoch = self.trajectory_start_time_sec > 0.0
 
         self.sub_state = self.create_subscription(
             QuadState, '/quad_state', self.state_cb, 10
+        )
+        self.sub_epoch = self.create_subscription(
+            Time,
+            '/trajectory_epoch',
+            self.epoch_cb,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL),
         )
 
         self.actual_path_pub = self.create_publisher(Path, '/viz/actual_path', 10)
@@ -53,10 +61,10 @@ class VisualizationNode(Node):
 
         self.frame_id = 'world'
         self.actual_body_frame_id = 'quad_actual'
-        self.m = 1.0
+        self.m = 4.34
         self.g = 9.81
-        self.kx = 8.0
-        self.kv = 5.0
+        self.kx = 16.0 * self.m
+        self.kv = 5.6 * self.m
         self.e3 = np.array([0.0, 0.0, 1.0], dtype=float)
 
         self.x = np.zeros(3, dtype=float)
@@ -76,6 +84,10 @@ class VisualizationNode(Node):
         self.desired_path_points = deque(maxlen=self.path_max_points)
         self.time_debug_counter = 0
 
+    def epoch_cb(self, msg):
+        self.trajectory_start_time_sec = stamp_to_seconds(msg)
+        self.have_epoch = True
+
     def state_cb(self, msg):
         self.x = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
         self.v = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
@@ -92,21 +104,12 @@ class VisualizationNode(Node):
             ],
             dtype=float,
         )
+        if not self.have_epoch:
+            return
         self._update_reference_from_state_stamp(msg.stamp)
         self.publish_visuals(msg.stamp)
 
     def _update_reference_from_state_stamp(self, stamp):
-        if self.trajectory_start_time_sec <= 0.0:
-            fallback_start_sec = stamp_to_seconds(stamp)
-            self.trajectory_start_time_sec = resolve_trajectory_start_time(
-                self.trajectory_start_time_sec,
-                fallback_start_sec,
-            )
-            self.get_logger().warn(
-                'trajectory_start_time_sec was not provided; '
-                'falling back to the first state stamp.'
-            )
-
         t = trajectory_time_from_stamp(
             stamp,
             self.trajectory_start_time_sec,

@@ -2,7 +2,9 @@ import rclpy
 from rclpy.node import Node
 import numpy as np
 
+from builtin_interfaces.msg import Time
 from quad_se3_msgs.msg import QuadState, ControlInput
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from .utils import euler_to_rotmat, hat, project_to_so3, rotmat_to_quat
 
 
@@ -15,10 +17,15 @@ class DynamicsNode(Node):
         )
 
         self.pub = self.create_publisher(QuadState, '/quad_state', 10)
+        self.epoch_pub = self.create_publisher(
+            Time,
+            '/trajectory_epoch',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL),
+        )
 
-        self.m = 1.0
+        self.m = 4.34
         self.g = 9.81
-        self.J = np.diag([0.02, 0.02, 0.04])
+        self.J = np.diag([0.0820, 0.0845, 0.1377])
         self.J_inv = np.linalg.inv(self.J)
         self.e3 = np.array([0.0, 0.0, 1.0])
 
@@ -55,6 +62,7 @@ class DynamicsNode(Node):
         self.dt = 0.002
         self.log_counter = 0
         self.timer = self.create_timer(self.dt, self.update)
+        self.epoch_published = False
 
     def control_cb(self, msg):
         self.f = float(msg.thrust)
@@ -82,6 +90,9 @@ class DynamicsNode(Node):
 
         msg = QuadState()
         msg.stamp = self.get_clock().now().to_msg()
+        if not self.epoch_published:
+            self.epoch_pub.publish(msg.stamp)
+            self.epoch_published = True
 
         msg.position.x, msg.position.y, msg.position.z = self.x
         msg.velocity.x, msg.velocity.y, msg.velocity.z = self.v
