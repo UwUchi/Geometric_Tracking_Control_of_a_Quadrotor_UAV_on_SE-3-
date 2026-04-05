@@ -44,15 +44,15 @@ def _paper_case_1_helix_reference(t):
             float(0.6 * (np.pi ** 3) * np.sin(pi_t)),
         ),
         'b1d': (
-            float(np.cos(pi_t)), 
-            float(np.sin(pi_t)), 
+            float(np.cos(pi_t)),
+            float(np.sin(pi_t)),
             0.0,
         ),
         'b1d_dot': (
-            float(-np.pi * np.sin(pi_t)), 
-            float(np.pi * np.cos(pi_t)), 
+            float(-np.pi * np.sin(pi_t)),
+            float(np.pi * np.cos(pi_t)),
             0.0,
-            ),
+        ),
     }
 
 

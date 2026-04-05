@@ -472,6 +472,48 @@ def plot_errors(output_dir, state_data, control_data, analysis_data, arm_length,
     fig.savefig(output_dir / 'errors.png', dpi=180)
     plt.close(fig)
 
+"""额外的调试图，显示位置误差在切向方向上的分量, 
+可以帮助分析误差是控制器的问题还是rviz2可视化的时间没对齐。"""
+def plot_debug(output_dir, state_data, trajectory_data):
+    target_times = state_data['time']
+    ref_position = interp_vectors(
+        trajectory_data['time'], trajectory_data['position'], target_times
+    )
+    ref_velocity = interp_vectors(
+        trajectory_data['time'], trajectory_data['velocity'], target_times
+    )
+    fig = plt.figure(figsize=(12, 10))
+    ax = fig.add_subplot(111)
+
+    position_error = state_data['position'] - ref_position
+    tangent_speed = np.linalg.norm(ref_velocity, axis=1)
+    tangent_error = np.divide(
+        np.sum(position_error * ref_velocity, axis=1),
+        tangent_speed,
+        out=np.zeros_like(target_times, dtype=float),
+        where=tangent_speed > 1e-6,
+    )
+    time = target_times - target_times[0]
+
+    ax.plot(
+        time,
+        tangent_error,
+        color='#e0663f',
+        linewidth=1.2,
+        label='$e_\\tau$',
+    )
+
+    ax.set_title('Tangential Position Error')
+    ax.set_xlabel('time [s]', labelpad=10)
+    ax.set_ylabel('$e_\\tau$ [m]', labelpad=10)
+    ax.legend()
+    _set_component_limits(ax, tangent_error)
+    _apply_paper_axis_style(ax)
+
+    fig.subplots_adjust(left=0.04, right=0.98, bottom=0.04, top=0.92)
+    fig.savefig(output_dir / 'errors_debug.png', dpi=180)
+    plt.close(fig)
+
 
 def write_summary(output_dir, state_data, analysis_data):
     summary = {
@@ -522,6 +564,7 @@ def main():
         args.arm_length,
         args.yaw_moment_coeff,
     )
+    plot_debug(output_dir, state_data, trajectory_data)
     write_summary(output_dir, state_data, analysis_data)
 
     print(f'Wrote plots and summary to {output_dir}')

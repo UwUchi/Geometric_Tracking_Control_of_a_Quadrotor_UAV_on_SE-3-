@@ -4,13 +4,19 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import Point, PoseStamped, TransformStamped
 from nav_msgs.msg import Path
-from quad_se3_msgs.msg import QuadState, TrajectoryPoint
+from quad_se3_msgs.msg import QuadState
 from rclpy.node import Node
 from std_msgs.msg import ColorRGBA
 from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
 
 from .reference import compute_desired_attitude_from_state
+from .timing import (
+    resolve_trajectory_start_time,
+    stamp_to_seconds,
+    trajectory_time_from_stamp,
+)
+from .trajectories import evaluate_trajectory
 from .utils import quat_to_rotmat, rotmat_to_quat
 
 
@@ -20,15 +26,22 @@ class VisualizationNode(Node):
 
         self.declare_parameter('path_max_points', 2000)
         self.declare_parameter('show_error_markers', True)
+        self.declare_parameter('trajectory_mode', 'hover')
+        self.declare_parameter('trajectory_start_time_sec', 0.0)
+        self.declare_parameter('reference_time_offset_sec', 0.0)
 
         self.path_max_points = int(self.get_parameter('path_max_points').value)
         self.show_error_markers = bool(self.get_parameter('show_error_markers').value)
+        self.trajectory_mode = self.get_parameter('trajectory_mode').value
+        self.trajectory_start_time_sec = float(
+            self.get_parameter('trajectory_start_time_sec').value
+        )
+        self.reference_time_offset_sec = float(
+            self.get_parameter('reference_time_offset_sec').value
+        )
 
         self.sub_state = self.create_subscription(
             QuadState, '/quad_state', self.state_cb, 10
-        )
-        self.sub_traj = self.create_subscription(
-            TrajectoryPoint, '/trajectory', self.traj_cb, 10
         )
 
         self.actual_path_pub = self.create_publisher(Path, '/viz/actual_path', 10)
@@ -61,6 +74,7 @@ class VisualizationNode(Node):
 
         self.actual_path_points = deque(maxlen=self.path_max_points)
         self.desired_path_points = deque(maxlen=self.path_max_points)
+        self.time_debug_counter = 0
 
     def state_cb(self, msg):
         self.x = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
@@ -78,21 +92,41 @@ class VisualizationNode(Node):
             ],
             dtype=float,
         )
+        self._update_reference_from_state_stamp(msg.stamp)
         self.publish_visuals(msg.stamp)
 
-    def traj_cb(self, msg):
-        self.xd = np.array([msg.position.x, msg.position.y, msg.position.z], dtype=float)
-        self.vd = np.array([msg.velocity.x, msg.velocity.y, msg.velocity.z], dtype=float)
-        self.xd_dd = np.array(
-            [msg.acceleration.x, msg.acceleration.y, msg.acceleration.z],
-            dtype=float,
+    def _update_reference_from_state_stamp(self, stamp):
+        if self.trajectory_start_time_sec <= 0.0:
+            fallback_start_sec = stamp_to_seconds(stamp)
+            self.trajectory_start_time_sec = resolve_trajectory_start_time(
+                self.trajectory_start_time_sec,
+                fallback_start_sec,
+            )
+            self.get_logger().warn(
+                'trajectory_start_time_sec was not provided; '
+                'falling back to the first state stamp.'
+            )
+
+        t = trajectory_time_from_stamp(
+            stamp,
+            self.trajectory_start_time_sec,
+            self.reference_time_offset_sec,
         )
-        self.xd_ddd = np.array([msg.jerk.x, msg.jerk.y, msg.jerk.z], dtype=float)
-        self.b1d = np.array([msg.b1d.x, msg.b1d.y, msg.b1d.z], dtype=float)
-        self.b1d_dot = np.array(
-            [msg.b1d_dot.x, msg.b1d_dot.y, msg.b1d_dot.z],
-            dtype=float,
-        )
+        sample = evaluate_trajectory(self.trajectory_mode, t)
+        self.xd = np.array(sample['position'], dtype=float)
+        self.vd = np.array(sample['velocity'], dtype=float)
+        self.xd_dd = np.array(sample['acceleration'], dtype=float)
+        self.xd_ddd = np.array(sample['jerk'], dtype=float)
+        self.b1d = np.array(sample['b1d'], dtype=float)
+        self.b1d_dot = np.array(sample['b1d_dot'], dtype=float)
+        self.time_debug_counter += 1
+        if self.time_debug_counter % 200 == 0:
+            stamp_sec = stamp_to_seconds(stamp)
+            now_sec = self.get_clock().now().nanoseconds * 1e-9
+            self.get_logger().info(
+                f'state age={now_sec - stamp_sec:.4f}s, '
+                f't_ref={t:.4f}s'
+            )
 
     def publish_visuals(self, stamp):
         Rd, _, _, _, _ = compute_desired_attitude_from_state(

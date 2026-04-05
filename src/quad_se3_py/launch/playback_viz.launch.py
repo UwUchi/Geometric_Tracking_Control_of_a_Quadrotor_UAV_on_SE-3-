@@ -14,6 +14,9 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('use_rviz', default_value='true'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('trajectory_mode', default_value='hover'),
+        DeclareLaunchArgument('trajectory_start_time_sec', default_value='0.0'),
+        DeclareLaunchArgument('reference_time_offset_sec', default_value='0.0'),
         DeclareLaunchArgument('path_max_points', default_value='2000'),
         DeclareLaunchArgument('show_error_markers', default_value='false'),
         DeclareLaunchArgument('rviz_config', default_value=default_rviz_config),
@@ -24,6 +27,13 @@ def generate_launch_description():
             parameters=[{
                 'path_max_points': LaunchConfiguration('path_max_points'),
                 'show_error_markers': LaunchConfiguration('show_error_markers'),
+                'trajectory_mode': LaunchConfiguration('trajectory_mode'),
+                'trajectory_start_time_sec': LaunchConfiguration(
+                    'trajectory_start_time_sec'
+                ),
+                'reference_time_offset_sec': LaunchConfiguration(
+                    'reference_time_offset_sec'
+                ),
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
             }],
         ),

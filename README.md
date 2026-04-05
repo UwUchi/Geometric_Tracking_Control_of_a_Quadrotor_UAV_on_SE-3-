@@ -101,6 +101,7 @@ source install/setup.bash
 - `/trajectory`
   - 类型：`quad_se3_msgs/msg/TrajectoryPoint`
   - 来源：`trajectory_node`
+  - 用途：参考轨迹采样观测流，便于录包、调试和离线核对
 - `/control_input`
   - 类型：`quad_se3_msgs/msg/ControlInput`
   - 来源：`controller_node`
@@ -119,6 +120,12 @@ RViz 可视化相关话题：
 相机跟随使用的 TF：
 
 - `world -> quad_actual`
+
+时间对齐约定：
+
+- 控制器和可视化都以 `QuadState.stamp` 为准重算期望轨迹
+- `/trajectory` 不再作为在线闭环的“当前期望真值”
+- `trajectory_start_time_sec` 由 launch 统一注入，保证各节点使用同一个轨迹时间零点
 
 ## Launch Files
 
@@ -141,9 +148,13 @@ ros2 launch quad_se3_py sim_viz.launch.py \
   use_rviz:=true \
   use_sim_time:=false \
   trajectory_mode:=paper_case_1_helix \
+  trajectory_start_time_sec:=<shared_start_time> \
   path_max_points:=2000 \
   show_error_markers:=true
 ```
+
+如果不显式传 `trajectory_start_time_sec`，`sim.launch.py` 和
+`sim_viz.launch.py` 会在启动时自动生成一个共享默认值。
 
 也支持显式指定 RViz 配置：
 
@@ -167,6 +178,15 @@ initial_yaw_deg:=0.0
 - `hover`：用于基础闭环验证
 - `paper_case_1_helix`：对应论文风格的空间轨迹跟踪演示
 - `paper_case_2_recovery_reference`：用于倒置恢复场景，重点在初始姿态设置
+
+轨迹查询规则：
+
+- `evaluate_trajectory(mode, t_sec)` 是统一参考入口
+- `trajectory_node` 继续定时发布 `/trajectory`
+- `controller_node` 与 `visualization_node` 会按 `state.stamp` 查询
+  `evaluate_trajectory(mode, t_state - trajectory_start_time_sec)`
+- 当前默认不做显式延迟补偿；未来若需要，可通过
+  `reference_time_offset_sec` 引入固定时间偏移
 
 ## Recommended Runs
 

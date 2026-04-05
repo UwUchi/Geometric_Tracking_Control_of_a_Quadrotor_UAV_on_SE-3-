@@ -1,3 +1,5 @@
+import time
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
@@ -8,11 +10,17 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     rviz_config = f"{get_package_share_directory('quad_se3_py')}/rviz/quad_se3.rviz"
+    default_trajectory_start_time = f'{time.time():.9f}'
 
     return LaunchDescription([
         DeclareLaunchArgument('use_rviz', default_value='true'),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('trajectory_mode', default_value='hover'),
+        DeclareLaunchArgument(
+            'trajectory_start_time_sec',
+            default_value=default_trajectory_start_time,
+        ),
+        DeclareLaunchArgument('reference_time_offset_sec', default_value='0.0'),
         DeclareLaunchArgument('path_max_points', default_value='2000'),
         DeclareLaunchArgument('show_error_markers', default_value='true'),
         DeclareLaunchArgument('rviz_config', default_value=rviz_config),
@@ -25,6 +33,12 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'trajectory_mode': LaunchConfiguration('trajectory_mode'),
+                'trajectory_start_time_sec': LaunchConfiguration(
+                    'trajectory_start_time_sec'
+                ),
+                'reference_time_offset_sec': LaunchConfiguration(
+                    'reference_time_offset_sec'
+                ),
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
             }],
         ),
@@ -33,6 +47,13 @@ def generate_launch_description():
             executable='controller_node',
             output='screen',
             parameters=[{
+                'trajectory_mode': LaunchConfiguration('trajectory_mode'),
+                'trajectory_start_time_sec': LaunchConfiguration(
+                    'trajectory_start_time_sec'
+                ),
+                'reference_time_offset_sec': LaunchConfiguration(
+                    'reference_time_offset_sec'
+                ),
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
             }],
         ),
@@ -54,6 +75,13 @@ def generate_launch_description():
             parameters=[{
                 'path_max_points': LaunchConfiguration('path_max_points'),
                 'show_error_markers': LaunchConfiguration('show_error_markers'),
+                'trajectory_mode': LaunchConfiguration('trajectory_mode'),
+                'trajectory_start_time_sec': LaunchConfiguration(
+                    'trajectory_start_time_sec'
+                ),
+                'reference_time_offset_sec': LaunchConfiguration(
+                    'reference_time_offset_sec'
+                ),
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
             }],
         ),

@@ -10,7 +10,7 @@ def test_desired_attitude_hover_matches_heading():
         v=np.zeros(3),
         xd=np.array([0.5, 0.3, 5.0]),
         vd=np.zeros(3),
-        xdd=np.zeros(3),
+        xd_dd=np.zeros(3),
         b1d=np.array([1.0, 0.0, 0.0]),
         b1d_dot=np.zeros(3),
         current_Rd=np.eye(3),
