@@ -5,6 +5,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile
 import numpy as np
 
 from quad_se3_msgs.msg import QuadState, ControlInput
+from .config import make_control_gains
 from .reference import compute_desired_attitude_and_force_from_state
 from .timing import (
     stamp_to_seconds,
@@ -65,10 +66,7 @@ class ControllerNode(Node):
         self.Omega_d_dot = np.zeros(3)
         self.Rd = np.eye(3)
 
-        self.kx = 16.0 * self.m
-        self.kv = 5.6 * self.m
-        self.kR = 8.81
-        self.kOmega = 2.54
+        self.gains = make_control_gains(self.m)
 
         self.dt = 0.01
         self.timer = self.create_timer(self.dt, self.update)
@@ -146,8 +144,8 @@ class ControllerNode(Node):
             m=self.m,
             g=self.g,
             e3=self.e3,
-            kx=self.kx,
-            kv=self.kv,
+            kx=self.gains.kx,
+            kv=self.gains.kv,
         )
         self.Rd = Rd
         self.Omega_d_prev = Omega_d
@@ -158,8 +156,8 @@ class ControllerNode(Node):
         f = -np.dot(A, self.R @ self.e3)
 
         M = (
-            -self.kR * e_R
-            - self.kOmega * e_Omega
+            -self.gains.kR * e_R
+            - self.gains.kOmega * e_Omega
             + np.cross(self.Omega, self.J @ self.Omega)
             - self.J @ (
                 hat(self.Omega) @ self.R.T @ Rd @ Omega_d

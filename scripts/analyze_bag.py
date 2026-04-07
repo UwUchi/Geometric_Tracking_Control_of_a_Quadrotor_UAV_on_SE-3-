@@ -50,6 +50,7 @@ os.environ['LD_LIBRARY_PATH'] = (
 )
 
 from quad_se3_py.reference import compute_desired_attitude_from_state
+from quad_se3_py.config import make_control_gains
 from quad_se3_py.timing import trajectory_time_from_stamp
 from quad_se3_py.trajectories import evaluate_trajectory
 from quad_se3_py.utils import quat_to_rotmat, vee
@@ -363,6 +364,7 @@ def analyze(state_data, reference_data):
     current_Rd = np.eye(3)
     current_Omega_d = np.zeros(3)
     e3 = np.array([0.0, 0.0, 1.0], dtype=float)
+    gains = make_control_gains(4.34)
 
     for index in range(len(target_times)):
         Rd, _, Omega_d, _, _ = compute_desired_attitude_from_state(
@@ -379,8 +381,8 @@ def analyze(state_data, reference_data):
             m=4.34,
             g=9.81,
             e3=e3,
-            kx=16*4.34,
-            kv=5.6*4.34,
+            kx=gains.kx,
+            kv=gains.kv,
             Omega_d_prev=current_Omega_d,
         )
         current_Rd = Rd

@@ -26,22 +26,22 @@ def _paper_case_1_helix_reference(t):
         'position': (
             float(0.4 * t),
             float(0.4 * np.sin(pi_t)),
-            float(0.6 * np.cos(pi_t)),
+            float(-0.6 * np.cos(pi_t)),
         ),
         'velocity': (
             0.4,
             float(0.4 * np.pi * np.cos(pi_t)),
-            float(-0.6 * np.pi * np.sin(pi_t)),
+            float(0.6 * np.pi * np.sin(pi_t)),
         ),
         'acceleration': (
             0.0,
             float(-0.4 * (np.pi ** 2) * np.sin(pi_t)),
-            float(-0.6 * (np.pi ** 2) * np.cos(pi_t)),
+            float(0.6 * (np.pi ** 2) * np.cos(pi_t)),
         ),
         'jerk': (
             0.0,
             float(-0.4 * (np.pi ** 3) * np.cos(pi_t)),
-            float(0.6 * (np.pi ** 3) * np.sin(pi_t)),
+            float(-0.6 * (np.pi ** 3) * np.sin(pi_t)),
         ),
         'b1d': (
             float(np.cos(pi_t)),

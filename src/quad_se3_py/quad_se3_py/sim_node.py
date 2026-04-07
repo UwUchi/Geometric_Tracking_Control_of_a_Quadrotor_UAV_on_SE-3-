@@ -8,6 +8,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile
 
 from quad_se3_msgs.msg import ControlInput, QuadState, TrajectoryPoint
 
+from .config import make_control_gains
 from .reference import compute_desired_attitude_and_force_from_state
 from .timing import (
     resolve_trajectory_start_time,
@@ -94,10 +95,7 @@ class SimNode(Node):
             dtype=float,
         )
 
-        self.kx = 16.0 * self.m
-        self.kv = 5.6 * self.m
-        self.kR = 8.81
-        self.kOmega = 2.54
+        self.gains = make_control_gains(self.m)
 
         self.xd = np.zeros(3)
         self.vd = np.zeros(3)
@@ -150,8 +148,8 @@ class SimNode(Node):
                 m=self.m,
                 g=self.g,
                 e3=self.e3,
-                kx=self.kx,
-                kv=self.kv,
+                kx=self.gains.kx,
+                kv=self.gains.kv,
             )
         )
         self.Rd = Rd
@@ -162,8 +160,8 @@ class SimNode(Node):
 
         thrust = float(-np.dot(A, self.R @ self.e3))
         moment = (
-            -self.kR * e_R
-            - self.kOmega * e_Omega
+            -self.gains.kR * e_R
+            - self.gains.kOmega * e_Omega
             + np.cross(self.Omega, self.J @ self.Omega)
             - self.J @ (
                 hat(self.Omega) @ self.R.T @ Rd @ Omega_d

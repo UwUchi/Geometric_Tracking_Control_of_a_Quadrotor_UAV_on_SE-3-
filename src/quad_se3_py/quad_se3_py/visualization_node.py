@@ -12,6 +12,7 @@ from std_msgs.msg import ColorRGBA
 from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
 
+from .config import make_control_gains
 from .reference import compute_desired_attitude_from_state
 from .timing import (
     stamp_to_seconds,
@@ -63,9 +64,11 @@ class VisualizationNode(Node):
         self.actual_body_frame_id = 'quad_actual'
         self.m = 4.34
         self.g = 9.81
-        self.kx = 16.0 * self.m
-        self.kv = 5.6 * self.m
+        self.gains = make_control_gains(self.m)
         self.e3 = np.array([0.0, 0.0, 1.0], dtype=float)
+        self.Rot = np.array([[1.0, 0.0, 0.0],
+                             [0.0, -1.0, 0.0],
+                             [0.0, 0.0, -1.0]], dtype=float)  # 绕x轴旋转180度，让世界坐标系和论文里的一致
 
         self.x = np.zeros(3, dtype=float)
         self.v = np.zeros(3, dtype=float)
@@ -104,6 +107,7 @@ class VisualizationNode(Node):
             ],
             dtype=float,
         )
+        self.q_rotated = rotmat_to_quat(self.Rot @ quat_to_rotmat(self.q))
         if not self.have_epoch:
             return
         self._update_reference_from_state_stamp(msg.stamp)
@@ -144,19 +148,20 @@ class VisualizationNode(Node):
             m=self.m,
             g=self.g,
             e3=self.e3,
-            kx=self.kx,
-            kv=self.kv,
+            kx=self.gains.kx,
+            kv=self.gains.kv,
             x_dd=self.x_dd,
             xd_ddd=self.xd_ddd,
         )
         self.Rd = Rd
-        desired_q = rotmat_to_quat(Rd)
+        # desired_q = rotmat_to_quat(Rd)
+        desired_q_rotated = rotmat_to_quat(self.Rot @ Rd)
 
-        actual_pose = self._make_pose(stamp, self.x, self.q)
-        desired_pose = self._make_pose(stamp, self.xd, desired_q)
+        actual_pose = self._make_pose(stamp, self.Rot @ self.x, self.q_rotated)
+        desired_pose = self._make_pose(stamp, self.Rot @ self.xd, desired_q_rotated)
         self.actual_pose_pub.publish(actual_pose)
         self.desired_pose_pub.publish(desired_pose)
-        self._publish_actual_tf(stamp, self.x, self.q)
+        self._publish_actual_tf(stamp, self.Rot @ self.x, self.q_rotated)
 
         self.actual_path_points.append(actual_pose)
         self.desired_path_points.append(desired_pose)
@@ -205,8 +210,8 @@ class VisualizationNode(Node):
             self._make_axis_marker(
                 stamp=stamp,
                 marker_id=0,
-                origin=self.x,
-                rotation_matrix=quat_to_rotmat(self.q),
+                origin=self.Rot @ self.x,
+                rotation_matrix=quat_to_rotmat(self.q_rotated),
                 namespace='actual_axes',
                 alpha=0.95,
             )
@@ -215,8 +220,8 @@ class VisualizationNode(Node):
             self._make_axis_marker(
                 stamp=stamp,
                 marker_id=1,
-                origin=self.xd,
-                rotation_matrix=Rd,
+                origin=self.Rot @ self.xd,
+                rotation_matrix=self.Rot @ Rd,
                 namespace='desired_axes',
                 alpha=0.75,
             )
@@ -269,8 +274,8 @@ class VisualizationNode(Node):
             marker.color.g = 0.15
             marker.color.b = 0.6
             marker.color.a = 0.95
-            marker.points.append(self._point_from_array(self.xd))
-            marker.points.append(self._point_from_array(self.x))
+            marker.points.append(self._point_from_array(self.Rot @ self.xd))
+            marker.points.append(self._point_from_array(self.Rot @ self.x))
         else:
             marker.type = Marker.SPHERE
             marker.scale.x = 0.001

@@ -485,6 +485,11 @@ RViz 里当前可能同时显示：
 `dynamics_node.py`、`trajectory_node.py` 仍保留在仓库中作为参考实现，
 但不再由默认 launch 启动。
 
+控制增益入口现在统一放在
+[`src/quad_se3_py/quad_se3_py/config.py`](/home/sachan/ros2_p_ws/src/quad_se3_py/quad_se3_py/config.py)，
+其中 `make_control_gains()` 统一生成 `kx`、`kv`、`kR`、`kOmega`，在线仿真、
+可视化和离线分析共用这一份默认配置。
+
 还没有做的事情包括：
 
 - 更完整的论文参数对齐与系统辨识
