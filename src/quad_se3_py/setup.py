@@ -29,6 +29,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'sim_node = quad_se3_py.sim_node:main',
             'trajectory_node = quad_se3_py.trajectory_node:main',
             'controller_node = quad_se3_py.controller_node:main',
             'dynamics_node = quad_se3_py.dynamics_node:main',

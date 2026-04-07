@@ -3,13 +3,13 @@
 一个基于 ROS 2 Humble 的四旋翼 SE(3) 几何跟踪控制复现项目。工作区当前包含：
 
 - `quad_se3_msgs`：状态、控制输入、轨迹点消息定义
-- `quad_se3_py`：轨迹源、控制器、动力学仿真、RViz 可视化
+- `quad_se3_py`：单节点仿真、参考轨迹、RViz 可视化与离线分析
 
 项目目标是先搭建一个可运行的论文风格闭环仿真，再通过 RViz 和 rosbag 做轨迹、姿态与误差分析。
 
 ## Current Features
 
-- SE(3) 几何控制闭环：轨迹节点 -> 控制器 -> 动力学节点
+- SE(3) 几何控制闭环：`sim_node` 内按固定顺序执行参考生成、控制计算、动力学积分与消息发布
 - 自定义 ROS 2 消息：
   - `QuadState`
   - `ControlInput`
@@ -50,11 +50,9 @@ ros2_p_ws/
         │   ├── playback_viz.launch.py
         │   └── sim_viz.launch.py
         ├── quad_se3_py/
-        │   ├── controller_node.py
-        │   ├── dynamics_node.py
         │   ├── reference.py
+        │   ├── sim_node.py
         │   ├── trajectories.py
-        │   ├── trajectory_node.py
         │   ├── utils.py
         │   └── visualization_node.py
         ├── rviz/
@@ -100,14 +98,14 @@ source install/setup.bash
 
 - `/trajectory`
   - 类型：`quad_se3_msgs/msg/TrajectoryPoint`
-  - 来源：`trajectory_node`
-  - 用途：参考轨迹采样观测流，便于录包、调试和离线核对
+  - 来源：`sim_node`
+  - 用途：与当前 `/quad_state` 同 stamp 的参考轨迹观测流，便于录包、调试和离线核对
 - `/control_input`
   - 类型：`quad_se3_msgs/msg/ControlInput`
-  - 来源：`controller_node`
+  - 来源：`sim_node`
 - `/quad_state`
   - 类型：`quad_se3_msgs/msg/QuadState`
-  - 来源：`dynamics_node`
+  - 来源：`sim_node`
 
 RViz 可视化相关话题：
 
@@ -123,9 +121,10 @@ RViz 可视化相关话题：
 
 时间对齐约定：
 
-- 控制器和可视化都以 `QuadState.stamp` 为准重算期望轨迹
-- `/trajectory` 不再作为在线闭环的“当前期望真值”
-- `trajectory_start_time_sec` 由 launch 统一注入，保证各节点使用同一个轨迹时间零点
+- `sim_node` 在一个固定 `0.002 s` 主循环里统一推进仿真时间
+- `/quad_state.stamp` 与 `/trajectory.stamp` 在同一步内完全一致
+- `/trajectory_epoch` 记录共享轨迹时间零点，供可视化和离线分析重建参考
+- `visualization_node` 继续以 `QuadState.stamp` 为准重算期望轨迹
 
 ## Launch Files
 
@@ -153,8 +152,7 @@ ros2 launch quad_se3_py sim_viz.launch.py \
   show_error_markers:=true
 ```
 
-如果不显式传 `trajectory_start_time_sec`，`sim.launch.py` 和
-`sim_viz.launch.py` 会在启动时自动生成一个共享默认值。
+如果不显式传 `trajectory_start_time_sec`，`sim_node` 会在启动时自动生成共享 epoch。
 
 也支持显式指定 RViz 配置：
 
@@ -173,7 +171,7 @@ initial_yaw_deg:=0.0
 
 ## Trajectory Modes
 
-`trajectory_node` 当前支持这些模式：
+`sim_node` 当前支持这些模式：
 
 - `hover`：用于基础闭环验证
 - `paper_case_1_helix`：对应论文风格的空间轨迹跟踪演示
@@ -182,8 +180,8 @@ initial_yaw_deg:=0.0
 轨迹查询规则：
 
 - `evaluate_trajectory(mode, t_sec)` 是统一参考入口
-- `trajectory_node` 继续定时发布 `/trajectory`
-- `controller_node` 与 `visualization_node` 会按 `state.stamp` 查询
+- `sim_node` 会在积分后按发布 stamp 再采样一份 `/trajectory`
+- `visualization_node` 会按 `state.stamp` 查询
   `evaluate_trajectory(mode, t_state - trajectory_start_time_sec)`
 - 当前默认不做显式延迟补偿；未来若需要，可通过
   `reference_time_offset_sec` 引入固定时间偏移
@@ -482,6 +480,10 @@ RViz 里当前可能同时显示：
 - 调控制参数
 - 验证姿态/轨迹跟踪行为
 - 复现论文中的典型演示场景
+
+当前默认运行链路已经切换到 `sim_node`。旧的 `controller_node.py`、
+`dynamics_node.py`、`trajectory_node.py` 仍保留在仓库中作为参考实现，
+但不再由默认 launch 启动。
 
 还没有做的事情包括：
 

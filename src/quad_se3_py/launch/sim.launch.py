@@ -18,7 +18,7 @@ def generate_launch_description():
         DeclareLaunchArgument('initial_yaw_deg', default_value='0.0'),
         Node(
             package='quad_se3_py',
-            executable='trajectory_node',
+            executable='sim_node',
             output='screen',
             parameters=[{
                 'trajectory_mode': LaunchConfiguration('trajectory_mode'),
@@ -28,29 +28,6 @@ def generate_launch_description():
                 'reference_time_offset_sec': LaunchConfiguration(
                     'reference_time_offset_sec'
                 ),
-                'use_sim_time': LaunchConfiguration('use_sim_time'),
-            }],
-        ),
-        Node(
-            package='quad_se3_py',
-            executable='controller_node',
-            output='screen',
-            parameters=[{
-                'trajectory_mode': LaunchConfiguration('trajectory_mode'),
-                'trajectory_start_time_sec': LaunchConfiguration(
-                    'trajectory_start_time_sec'
-                ),
-                'reference_time_offset_sec': LaunchConfiguration(
-                    'reference_time_offset_sec'
-                ),
-                'use_sim_time': LaunchConfiguration('use_sim_time'),
-            }],
-        ),
-        Node(
-            package='quad_se3_py',
-            executable='dynamics_node',
-            output='screen',
-            parameters=[{
                 'initial_roll_deg': LaunchConfiguration('initial_roll_deg'),
                 'initial_pitch_deg': LaunchConfiguration('initial_pitch_deg'),
                 'initial_yaw_deg': LaunchConfiguration('initial_yaw_deg'),

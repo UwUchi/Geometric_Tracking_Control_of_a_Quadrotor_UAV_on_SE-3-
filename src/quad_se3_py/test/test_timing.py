@@ -2,6 +2,7 @@ from builtin_interfaces.msg import Time
 
 from quad_se3_py.timing import (
     resolve_trajectory_start_time,
+    seconds_to_stamp,
     stamp_to_seconds,
     trajectory_time_from_stamp,
 )
@@ -9,6 +10,11 @@ from quad_se3_py.timing import (
 
 def test_stamp_to_seconds():
     stamp = Time(sec=12, nanosec=500_000_000)
+    assert stamp_to_seconds(stamp) == 12.5
+
+
+def test_seconds_to_stamp_round_trips():
+    stamp = seconds_to_stamp(12.5)
     assert stamp_to_seconds(stamp) == 12.5
 
 

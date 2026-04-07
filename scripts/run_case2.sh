@@ -39,6 +39,7 @@ update_metadata_after_recording() {
   local detected_start_time
   detected_start_time="$(
     python3 - "${output_dir}" <<'PY'
+import json
 import sys
 from pathlib import Path
 
