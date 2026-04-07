@@ -41,6 +41,7 @@ import sys
 from pathlib import Path
 
 import rosbag2_py
+from quad_se3_py.analysis_timebase import choose_recorded_epoch_start_time
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
@@ -54,23 +55,22 @@ topic_types = {topic.name: topic.type for topic in reader.get_all_topics_and_typ
 epoch_type = get_message(topic_types['/trajectory_epoch'])
 quad_state_type = get_message(topic_types['/quad_state'])
 
-start_time_sec = None
-epoch_source = 'first_quad_state_stamp'
+epoch_time_sec = None
+first_state_time_sec = None
 while reader.has_next():
     topic, data, timestamp_ns = reader.read_next()
-    if topic == '/trajectory_epoch':
+    if topic == '/trajectory_epoch' and epoch_time_sec is None:
         message = deserialize_message(data, epoch_type)
-        start_time_sec = float(message.sec) + float(message.nanosec) * 1e-9
-        epoch_source = 'trajectory_epoch_topic'
+        epoch_time_sec = float(message.sec) + float(message.nanosec) * 1e-9
         break
-    if topic != '/quad_state':
-        continue
-    message = deserialize_message(data, quad_state_type)
-    start_time_sec = float(message.stamp.sec) + float(message.stamp.nanosec) * 1e-9
-    break
+    if topic == '/quad_state' and first_state_time_sec is None:
+        message = deserialize_message(data, quad_state_type)
+        first_state_time_sec = float(message.stamp.sec) + float(message.stamp.nanosec) * 1e-9
 
-if start_time_sec is None:
-    raise RuntimeError('No /quad_state sample found while updating bag metadata.')
+start_time_sec, epoch_source = choose_recorded_epoch_start_time(
+    epoch_time_sec,
+    first_state_time_sec,
+)
 
 print(json.dumps({
     'trajectory_start_time_sec': start_time_sec,
@@ -135,7 +135,7 @@ printf '%s\n' \
   "  \"trajectory_mode\": \"${trajectory_mode}\"," \
   '  "trajectory_start_time_sec": null,' \
   "  \"reference_time_offset_sec\": ${reference_time_offset_sec}," \
-  '  "trajectory_epoch_source": "pending_first_quad_state_stamp",' \
+  '  "trajectory_epoch_source": "pending_trajectory_epoch_lookup",' \
   '  "reference_source": "time_function"' \
   '}' > "${metadata_path}"
 

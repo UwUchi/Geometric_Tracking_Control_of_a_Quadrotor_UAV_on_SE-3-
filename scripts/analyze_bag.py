@@ -50,9 +50,13 @@ os.environ['LD_LIBRARY_PATH'] = (
 )
 
 from quad_se3_py.reference import compute_desired_attitude_from_state
+from quad_se3_py.analysis_timebase import (
+    reconstruct_reference_from_stamps,
+    resolve_reference_source,
+    resolve_reference_time_offset_sec,
+    resolve_time_function_start_time,
+)
 from quad_se3_py.config import make_control_gains
-from quad_se3_py.timing import trajectory_time_from_stamp
-from quad_se3_py.trajectories import evaluate_trajectory
 from quad_se3_py.utils import quat_to_rotmat, vee
 
 
@@ -100,6 +104,11 @@ def parse_args():
         '--trajectory-start-time-sec',
         type=float,
         help='Shared trajectory start time in ROS seconds. Defaults to the first /trajectory stamp.',
+    )
+    parser.add_argument(
+        '--reference-time-offset-sec',
+        type=float,
+        help='Fixed reference time offset in seconds. Defaults to bag metadata or 0.0.',
     )
     parser.add_argument(
         '--reference-source',
@@ -258,23 +267,6 @@ def infer_trajectory_mode(bag_path, case_name_override):
     return 'hover'
 
 
-def resolve_reference_source(reference_source_arg, experiment_metadata, epoch_time_sec):
-    if reference_source_arg != 'auto':
-        return reference_source_arg
-    if epoch_time_sec is not None:
-        return 'time_function'
-    if (
-        experiment_metadata.get('trajectory_mode') is not None
-        and experiment_metadata.get('trajectory_epoch_source') in (
-            'first_quad_state_stamp',
-            'trajectory_epoch_topic',
-        )
-        and experiment_metadata.get('trajectory_start_time_sec') is not None
-    ):
-        return 'time_function'
-    return 'trajectory_topic'
-
-
 def interp_vectors(source_times, source_values, target_times):
     if len(source_times) == 0:
         raise RuntimeError('Cannot interpolate empty source data.')
@@ -290,35 +282,14 @@ def reconstruct_reference_from_time_function(
     state_data,
     trajectory_mode,
     trajectory_start_time_sec,
+    reference_time_offset_sec=0.0,
 ):
-    ref_position = []
-    ref_velocity = []
-    ref_acceleration = []
-    ref_jerk = []
-    ref_b1d = []
-    ref_b1d_dot = []
-    trajectory_time = []
-
-    for stamp in state_data['stamp']:
-        t = trajectory_time_from_stamp(stamp, trajectory_start_time_sec)
-        sample = evaluate_trajectory(trajectory_mode, t)
-        trajectory_time.append(t)
-        ref_position.append(sample['position'])
-        ref_velocity.append(sample['velocity'])
-        ref_acceleration.append(sample['acceleration'])
-        ref_jerk.append(sample['jerk'])
-        ref_b1d.append(sample['b1d'])
-        ref_b1d_dot.append(sample['b1d_dot'])
-
-    return {
-        'trajectory_time': np.array(trajectory_time, dtype=float),
-        'position': np.array(ref_position, dtype=float),
-        'velocity': np.array(ref_velocity, dtype=float),
-        'acceleration': np.array(ref_acceleration, dtype=float),
-        'jerk': np.array(ref_jerk, dtype=float),
-        'b1d': np.array(ref_b1d, dtype=float),
-        'b1d_dot': np.array(ref_b1d_dot, dtype=float),
-    }
+    return reconstruct_reference_from_stamps(
+        state_data['stamp'],
+        trajectory_mode,
+        trajectory_start_time_sec,
+        reference_time_offset_sec,
+    )
 
 
 def reconstruct_reference_from_topic(state_data, trajectory_data):
@@ -644,6 +615,7 @@ def write_summary(output_dir, state_data, analysis_data):
         'reference_source': analysis_data.get('reference_source'),
         'trajectory_mode': analysis_data.get('trajectory_mode'),
         'trajectory_start_time_sec': analysis_data.get('trajectory_start_time_sec'),
+        'reference_time_offset_sec': analysis_data.get('reference_time_offset_sec'),
     }
     with open(output_dir / 'summary.json', 'w', encoding='utf-8') as file:
         json.dump(summary, file, indent=2)
@@ -678,17 +650,17 @@ def main():
         or infer_trajectory_mode(bag_path, args.case_name)
     )
     if reference_source == 'time_function':
-        trajectory_start_time_sec = (
-            args.trajectory_start_time_sec
-            if args.trajectory_start_time_sec is not None
-            else (
-                experiment_metadata.get('trajectory_start_time_sec')
-                if experiment_metadata.get('trajectory_start_time_sec') is not None
-                else epoch_time_sec
-            )
+        trajectory_start_time_sec, start_time_source = resolve_time_function_start_time(
+            args.trajectory_start_time_sec,
+            epoch_time_sec,
+            experiment_metadata,
+            trajectory_data['time'][0] if len(trajectory_data['time']) > 0 else None,
         )
-        if trajectory_start_time_sec is None:
-            trajectory_start_time_sec = trajectory_data['time'][0]
+        reference_time_offset_sec = resolve_reference_time_offset_sec(
+            args.reference_time_offset_sec,
+            experiment_metadata,
+        )
+        if start_time_source == 'first_trajectory_stamp':
             print(
                 'Warning: time_function reference without recorded '
                 'trajectory_start_time_sec uses the first /trajectory stamp as '
@@ -698,9 +670,14 @@ def main():
             state_data,
             trajectory_mode,
             trajectory_start_time_sec,
+            reference_time_offset_sec,
         )
     else:
         reference_data = reconstruct_reference_from_topic(state_data, trajectory_data)
+        reference_time_offset_sec = resolve_reference_time_offset_sec(
+            args.reference_time_offset_sec,
+            experiment_metadata,
+        )
 
     analysis_data = analyze(state_data, reference_data)
     analysis_data['reference_source'] = reference_source
@@ -710,6 +687,7 @@ def main():
         if reference_source == 'time_function'
         else experiment_metadata.get('trajectory_start_time_sec')
     )
+    analysis_data['reference_time_offset_sec'] = reference_time_offset_sec
     font_path = "/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf"
     font_manager.fontManager.addfont(font_path)
     font_name = font_manager.FontProperties(fname=font_path).get_name()
