@@ -50,6 +50,8 @@ ros2_p_ws/
         │   ├── playback_viz.launch.py
         │   └── sim_viz.launch.py
         ├── quad_se3_py/
+        │   ├── analysis_timebase.py
+        │   ├── config.py
         │   ├── reference.py
         │   ├── sim_node.py
         │   ├── trajectories.py
@@ -287,6 +289,7 @@ cd /home/sachan/ros2_p_ws
 录制内容：
 
 - `/quad_state`
+- `/trajectory_epoch`
 - `/trajectory`
 - `/control_input`
 
@@ -321,11 +324,33 @@ python3 scripts/analyze_bag.py
 python3 scripts/analyze_bag.py bags/case1_helix_20260328_204828
 ```
 
+离线分析的参考时间零点优先级是：
+
+- `--trajectory-start-time-sec`
+- bag 中录到的 `/trajectory_epoch`
+- `experiment_metadata.json` 中的 `trajectory_start_time_sec`
+- 首条 `/trajectory.stamp`（仅作为最后回退）
+
+参考时间偏移优先级是：
+
+- `--reference-time-offset-sec`
+- `experiment_metadata.json` 中的 `reference_time_offset_sec`
+- 默认 `0.0`
+
+这样可以让实时仿真、慢放回放和离线误差图尽量使用同一套时间口径。
+
 ### 指定输出目录
 
 ```bash
 python3 scripts/analyze_bag.py bags/case1_helix_20260328_204828 \
   --output-dir plots/manual_case1
+```
+
+也支持显式覆盖参考时间偏移：
+
+```bash
+python3 scripts/analyze_bag.py bags/case1_helix_20260328_204828 \
+  --reference-time-offset-sec 0.02
 ```
 
 分析输出默认写到：
@@ -361,6 +386,8 @@ cd /home/sachan/ros2_p_ws
 - 启动仅用于回放的可视化 launch
 - 使用 `/clock` 驱动 RViz 和 visualization 节点
 - 默认以 `0.5x` 速度播放
+- 优先使用 bag 中记录的 `/trajectory_epoch` 和 metadata 里的
+  `reference_time_offset_sec` 来对齐参考时间
 
 也可以指定 bag 和倍率：
 
@@ -446,6 +473,10 @@ plots/<bag_directory_name>/
 
 只有在你显式传入 `--output-dir` 时，才会写到你指定的固定目录。
 
+如果误差图看起来和实时 RViz 不一致，先检查 bag 里是否录到了
+`/trajectory_epoch`，以及 `experiment_metadata.json` 中的
+`trajectory_epoch_source` 是否为 `trajectory_epoch_topic`。
+
 ### 3. VS Code / Pylance 无法解析 `quad_se3_py`
 
 如果编辑器提示导入错误，重载 VS Code 窗口即可：
@@ -511,5 +542,5 @@ source install/setup.bash
 停止后自动分析。随后查看：
 
 ```text
-plots/case1_helix/
+plots/case1_helix_<timestamp>/
 ```
